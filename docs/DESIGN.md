@@ -314,8 +314,11 @@ POST   /external/vocabulary
   "source": "browser_extension",
   "collection_id": null                          // mặc định: Inbox / collection mặc định của app
 }
-→ 201 {id, created: true}   hoặc   200 {id, created: false, context_added: true}   (upsert)
+→ 201 {id, status: "created", ...}   hoặc   200 {id, status: "updated" | "unchanged", ...}   (upsert)
+POST   /external/vocabulary/batch      {"items": [WordInput | "word", ...] (1–100), ...mặc định cấp batch}
+       → 200 {"summary": {created, updated, unchanged, failed, total}, "results": [{index, status, ...}]}
 GET    /external/vocabulary/lookup?word=leverage&language=en    (extension kiểm tra đã lưu chưa)
+GET    /external/collections            (bộ từ key được phép ghi vào)
 ```
 Quản lý key (dùng JWT user): `GET/POST /external/applications`, `POST /external/applications/{id}/keys`, `DELETE /external/keys/{id}`.
 

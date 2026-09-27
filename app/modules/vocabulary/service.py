@@ -179,7 +179,7 @@ def build_senses(senses: list[SenseIn], default_translation_lang: str) -> list[V
     return built
 
 
-def _resolve_tags(owner_id: str, names: list[str]) -> list[Tag]:
+def resolve_tags(owner_id: str, names: list[str]) -> list[Tag]:
     if not names:
         return []
     existing = {
@@ -246,7 +246,7 @@ def create_vocabulary(
         enrichment_status=enrichment_status,
     )
     vocab.senses = build_senses(data.senses, user.native_language_code)
-    vocab.tags = _resolve_tags(user.id, data.tags)
+    vocab.tags = resolve_tags(user.id, data.tags)
     vocab.contexts = [build_context(user.id, c) for c in data.contexts]
     db.session.add(vocab)
     db.session.flush()
@@ -280,7 +280,7 @@ def update_vocabulary(user: User, vocab_id: str, data: VocabularyUpdate) -> Voca
         if vocab.senses and vocab.enrichment_status == "pending":
             vocab.enrichment_status = "done"
     if data.tags is not None:
-        vocab.tags = _resolve_tags(vocab.owner_id, data.tags)
+        vocab.tags = resolve_tags(vocab.owner_id, data.tags)
     vocab.updated_at = utcnow()
     db.session.commit()
     return vocab

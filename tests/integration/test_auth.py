@@ -120,4 +120,5 @@ def test_login_rejects_open_redirect(client, alice):
 def test_static_assets_served(client):
     assert client.get("/static/css/app.css").status_code == 200
     assert client.get("/static/js/api.js").status_code == 200
+    assert client.get("/static/openapi.yaml").status_code == 200
     assert client.get("/favicon.ico").status_code == 302

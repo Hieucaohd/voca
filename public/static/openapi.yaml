@@ -1,0 +1,408 @@
+openapi: 3.1.0
+info:
+  title: Voca External API
+  version: 1.1.0
+  summary: Thêm từ vựng vào kho của người dùng Voca từ ứng dụng khác.
+  description: |
+    Gửi một từ hoặc tối đa 100 từ mỗi request. Voca upsert theo (người dùng, ngôn ngữ, từ):
+    gửi lại một từ đã có chỉ bổ sung nghĩa, ngữ cảnh, tag hoặc bộ từ mới, không tạo bản trùng,
+    nên gửi lại khi lỗi mạng hoặc 5xx là an toàn.
+
+    Hướng dẫn đầy đủ: docs/external-api/README.md trong repository.
+servers:
+  - url: https://voca-zeta-five.vercel.app/api/v1
+    description: Production
+  - url: http://127.0.0.1:5000/api/v1
+    description: Local development
+security:
+  - ApiKey: []
+tags:
+  - name: Vocabulary
+    description: Thêm, cập nhật và tra cứu từ trong kho của người dùng
+  - name: Collections
+    description: Bộ từ đích để import vào
+  - name: Reference
+    description: Dữ liệu tham chiếu, không cần API key
+
+paths:
+  /external/vocabulary:
+    post:
+      tags: [Vocabulary]
+      operationId: addWord
+      summary: Thêm hoặc cập nhật một từ
+      description: "Scope: `vocabulary:write`. Trả 201 khi tạo mới, 200 khi từ đã có."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WordInput" }
+            example:
+              word: leverage
+              translation: tận dụng
+              meaning: use something to maximum advantage
+              part_of_speech: verb
+              tags: [Finance]
+              context:
+                sentence: Financial institutions leverage derivatives to hedge risk.
+                source_title: Quant book
+                location: Chương 3
+              source: quant_reader
+      responses:
+        "201":
+          description: Từ mới đã được tạo
+          headers:
+            X-RateLimit-Limit: { $ref: "#/components/headers/RateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/RateLimitRemaining" }
+            X-RateLimit-Reset: { $ref: "#/components/headers/RateLimitReset" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WordResult" }
+        "200":
+          description: Từ đã có; `status` là `updated` hoặc `unchanged`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WordResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /external/vocabulary/batch:
+    post:
+      tags: [Vocabulary]
+      operationId: addWords
+      summary: Thêm hoặc cập nhật 1–100 từ
+      description: |
+        Scope: `vocabulary:write`. Mỗi mục được xử lý và lưu độc lập theo thứ tự gửi lên.
+        Mục lỗi nằm trong `results[i].error`; HTTP status vẫn là 200. Trường cấp batch là
+        giá trị mặc định cho mục không tự đặt trường đó.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BatchInput" }
+            example:
+              source: realtime_caption
+              tags: [Podcast]
+              items:
+                - word: serendipity
+                  translation: sự tình cờ may mắn
+                  context:
+                    sentence: It was pure serendipity.
+                    source_title: "Lex Fridman #412"
+                    location: "01:12:05"
+                - ubiquitous
+      responses:
+        "200":
+          description: Kết quả từng mục
+          headers:
+            X-RateLimit-Limit: { $ref: "#/components/headers/RateLimitLimit" }
+            X-RateLimit-Remaining: { $ref: "#/components/headers/RateLimitRemaining" }
+            X-RateLimit-Reset: { $ref: "#/components/headers/RateLimitReset" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BatchResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /external/vocabulary/lookup:
+    get:
+      tags: [Vocabulary]
+      operationId: lookupWord
+      summary: Kiểm tra một từ đã có trong kho chưa
+      description: "Scope: `vocabulary:read`. Không phân biệt hoa thường."
+      parameters:
+        - name: word
+          in: query
+          required: true
+          schema: { type: string, maxLength: 200 }
+        - name: language
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/LanguageCode" }
+      responses:
+        "200":
+          description: Kết quả tìm
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LookupResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /external/collections:
+    get:
+      tags: [Collections]
+      operationId: listCollections
+      summary: Bộ từ mà key có thể ghi vào
+      description: "Scope: `vocabulary:read`. Gồm bộ của người dùng và bộ được chia sẻ với quyền biên tập."
+      responses:
+        "200":
+          description: Danh sách bộ từ
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Collection" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /languages:
+    get:
+      tags: [Reference]
+      operationId: listLanguages
+      summary: Ngôn ngữ được hỗ trợ
+      security: []
+      responses:
+        "200":
+          description: Danh sách ngôn ngữ
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [code, name, native_name]
+                      properties:
+                        code: { type: string, example: en }
+                        name: { type: string, example: English }
+                        native_name: { type: string, example: English }
+
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: "Tạo trong Voca: Cài đặt → Ứng dụng kết nối. Dạng `voca_<prefix>_<secret>`."
+
+  headers:
+    RateLimitLimit:
+      description: Số request tối đa trong cửa sổ hiện tại
+      schema: { type: integer }
+    RateLimitRemaining:
+      description: Số request còn lại trong cửa sổ hiện tại
+      schema: { type: integer }
+    RateLimitReset:
+      description: Thời điểm cửa sổ được đặt lại (Unix timestamp, giây)
+      schema: { type: integer }
+
+  schemas:
+    LanguageCode:
+      type: string
+      enum: [en, vi, ja, ko, zh, fr, de, es]
+      default: en
+
+    Context:
+      type: object
+      description: Câu nơi người dùng gặp từ. Cần ít nhất một trong sentence, source_title, url.
+      properties:
+        sentence: { type: [string, "null"], maxLength: 2000 }
+        translation: { type: [string, "null"], maxLength: 2000, description: Bản dịch câu }
+        source_title: { type: [string, "null"], maxLength: 255, description: "Tên nguồn, gom từ theo tài liệu" }
+        source_type:
+          type: [string, "null"]
+          enum: [book, article, video, caption, chat, course, other, null]
+        location: { type: [string, "null"], maxLength: 255, example: Chương 3 }
+        url: { type: [string, "null"], maxLength: 1000 }
+
+    WordInput:
+      type: object
+      required: [word]
+      properties:
+        word: { type: string, minLength: 1, maxLength: 200 }
+        language: { $ref: "#/components/schemas/LanguageCode" }
+        translation: { type: [string, "null"], maxLength: 1000, description: "Nghĩa bằng tiếng mẹ đẻ của người học" }
+        translation_language: { type: [string, "null"], maxLength: 8, description: "Mặc định: tiếng mẹ đẻ của người dùng (vi)" }
+        meaning: { type: [string, "null"], maxLength: 2000, description: "Định nghĩa bằng ngôn ngữ của từ" }
+        part_of_speech: { type: [string, "null"], maxLength: 30, example: verb }
+        phonetic: { type: [string, "null"], maxLength: 200, description: "Chỉ dùng khi từ chưa có phiên âm" }
+        tags:
+          type: array
+          maxItems: 20
+          items: { type: string }
+        context:
+          description: Đối tượng Context, hoặc chuỗi được hiểu là context.sentence
+          oneOf:
+            - $ref: "#/components/schemas/Context"
+            - { type: string, maxLength: 2000 }
+            - { type: "null" }
+        source: { type: [string, "null"], maxLength: 64, description: "Tên ứng dụng/tính năng, lưu cùng context" }
+        collection_id: { type: [string, "null"], description: "Bộ từ đích; mặc định bộ của ứng dụng hoặc Inbox" }
+
+    BatchInput:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            oneOf:
+              - $ref: "#/components/schemas/WordInput"
+              - { type: string, description: 'Viết tắt cho {"word": "<chuỗi>"}' }
+        language: { $ref: "#/components/schemas/LanguageCode" }
+        translation_language: { type: string, maxLength: 8 }
+        source: { type: string, maxLength: 64 }
+        collection_id: { type: string }
+        tags:
+          type: array
+          maxItems: 20
+          items: { type: string }
+
+    WordStatus:
+      type: string
+      enum: [created, updated, unchanged]
+
+    WordResult:
+      type: object
+      required: [id, word, status, created, sense_added, context_added, collection_added]
+      properties:
+        id: { type: string, format: uuid }
+        word: { type: string }
+        status: { $ref: "#/components/schemas/WordStatus" }
+        created: { type: boolean }
+        sense_added: { type: boolean }
+        context_added: { type: boolean }
+        collection_added: { type: boolean }
+
+    BatchItemResult:
+      oneOf:
+        - allOf:
+            - $ref: "#/components/schemas/WordResult"
+            - type: object
+              required: [index]
+              properties:
+                index: { type: integer, minimum: 0 }
+        - type: object
+          required: [index, status, error]
+          properties:
+            index: { type: integer, minimum: 0 }
+            status: { const: failed }
+            word: { type: [string, "null"] }
+            error: { $ref: "#/components/schemas/ErrorBody" }
+
+    BatchResult:
+      type: object
+      required: [summary, results]
+      properties:
+        summary:
+          type: object
+          required: [created, updated, unchanged, failed, total]
+          properties:
+            created: { type: integer }
+            updated: { type: integer }
+            unchanged: { type: integer }
+            failed: { type: integer }
+            total: { type: integer }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/BatchItemResult" }
+
+    LookupResult:
+      oneOf:
+        - type: object
+          required: [found]
+          properties:
+            found: { const: false }
+        - type: object
+          required: [found, id, word, meaning]
+          properties:
+            found: { const: true }
+            id: { type: string, format: uuid }
+            word: { type: string }
+            meaning: { type: string, description: "Nghĩa chính; chuỗi rỗng nếu chưa có" }
+
+    Collection:
+      type: object
+      required: [id, name, parent_id, is_inbox, role, word_count]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        parent_id: { type: [string, "null"] }
+        is_inbox: { type: boolean }
+        role: { type: string, enum: [owner, editor] }
+        word_count: { type: integer }
+
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          examples: [UNAUTHORIZED, FORBIDDEN, NOT_FOUND, VALIDATION_ERROR, TOO_MANY_REQUESTS, INTERNAL_ERROR]
+        message: { type: string }
+        details:
+          description: Với VALIDATION_ERROR thường là danh sách {field, message}
+          oneOf:
+            - type: array
+              items:
+                type: object
+                properties:
+                  field: { type: string }
+                  message: { type: string }
+            - type: object
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { $ref: "#/components/schemas/ErrorBody" }
+        request_id: { type: [string, "null"] }
+
+  responses:
+    Unauthorized:
+      description: Thiếu, sai hoặc đã thu hồi API key
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Key thiếu scope cần thiết
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: collection_id không tồn tại hoặc không có quyền ghi
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TooLarge:
+      description: Body lớn hơn 1 MB
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Dữ liệu không hợp lệ
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TooManyRequests:
+      description: Vượt giới hạn tần suất; chờ Retry-After giây
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    InternalError:
+      description: Lỗi phía Voca; gửi lại với backoff
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

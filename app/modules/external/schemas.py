@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -51,6 +51,24 @@ class CaptureIn(BaseModel):
     @classmethod
     def _string_context(cls, value):
         return {"sentence": value} if isinstance(value, str) else value
+
+
+MAX_BATCH_ITEMS = 100
+
+
+class BatchIn(BaseModel):
+    """Items are validated one by one in the service so a bad item only fails itself."""
+
+    items: list[Any] = Field(min_length=1, max_length=MAX_BATCH_ITEMS)
+    # Defaults applied to every item that does not set the field itself.
+    language: str | None = Field(default=None, max_length=8)
+    translation_language: str | None = Field(default=None, max_length=8)
+    source: str | None = Field(default=None, max_length=64)
+    collection_id: str | None = None
+    tags: list[str] | None = Field(default=None, max_length=20)
+
+    def defaults(self) -> dict:
+        return {k: v for k, v in self.model_dump(exclude={"items"}).items() if v is not None}
 
 
 def key_to_dict(key) -> dict:

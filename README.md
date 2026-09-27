@@ -19,7 +19,7 @@ Thiết kế chi tiết (ERD, API, thuật toán): [docs/DESIGN.md](docs/DESIGN.
 | Bộ từ | Lồng nhau, “Hộp thư từ mới” mặc định, chia sẻ riêng tư/chia sẻ/công khai, vai trò người xem/biên tập, link mời, tham gia bộ công khai |
 | Học | Flashcard (Quên/Khó/Nhớ/Dễ, hiện trước khoảng cách ôn), trắc nghiệm, gõ từ (chấp nhận sai 1 ký tự), phím tắt, “Tôi đã biết”, tạm ngưng, học lại |
 | Thống kê | Mục tiêu ngày, độ chính xác, chuỗi ngày học, phân bố trạng thái, lịch hoạt động 12 tháng |
-| API ngoài | API key cho từng ứng dụng (extension, app phụ đề, chatbot), `POST /api/v1/external/vocabulary` kiểu upsert: từ đã có thì chỉ bổ sung nghĩa/ngữ cảnh mới |
+| API ngoài | API key cho từng ứng dụng (extension, app phụ đề, chatbot), thêm một hoặc nhiều từ (tối đa 100/request) kiểu upsert: từ đã có thì chỉ bổ sung nghĩa, ngữ cảnh, tag mới |
 
 ## Chạy ở máy local
 
@@ -64,18 +64,13 @@ Mỗi lần đổi model thì chạy `flask db migrate -m "..."` ở local, ki�
 
 ## Gửi từ từ ứng dụng khác
 
-Vào **Cài đặt → Ứng dụng kết nối** để tạo API key. Key chỉ hiện một lần.
+Các service khác (app phụ đề, extension, chatbot, script import) thêm được một hoặc nhiều từ qua External API bằng API key tạo trong **Cài đặt → Ứng dụng kết nối**:
 
-```bash
-curl -X POST https://<domain>/api/v1/external/vocabulary \
-  -H "X-API-Key: voca_xxxxxxxx_yyyy" \
-  -H "Content-Type: application/json" \
-  -d '{"word": "leverage", "translation": "tận dụng",
-       "context": {"sentence": "Financial institutions leverage derivatives...", "source_title": "Quant book", "location": "Chapter 3"},
-       "source": "realtime_caption"}'
-```
+- `POST /api/v1/external/vocabulary`: một từ
+- `POST /api/v1/external/vocabulary/batch`: tối đa 100 từ mỗi request, từng mục thành công hoặc thất bại độc lập
+- Gửi lại không tạo trùng: từ đã có chỉ được bổ sung nghĩa, ngữ cảnh, tag mới
 
-Chỉ `word` là bắt buộc. Kết quả trả `201` khi tạo mới, `200` khi từ đã có (trường `sense_added`/`context_added` cho biết có bổ sung gì). CORS mở cho nhóm endpoint này nên extension trình duyệt gọi thẳng được. Kiểm tra một từ đã lưu chưa: `GET /api/v1/external/vocabulary/lookup?word=leverage`.
+Tài liệu cho người tích hợp: [docs/external-api/](docs/external-api/README.md), gồm hướng dẫn, tham chiếu, ví dụ, client Python [voca_client.py](docs/external-api/voca_client.py) và [OpenAPI spec](public/static/openapi.yaml) (trên production: `/static/openapi.yaml`).
 
 ## Cấu trúc thư mục
 
@@ -109,6 +104,6 @@ Tiền tố `/api/v1`. Xác thực bằng `Authorization: Bearer <access_token>`
 | Bộ từ | `GET/POST /collections` · `GET/PATCH/DELETE /collections/{id}` · `POST /collections/{id}/words` · `DELETE /collections/{id}/words/{word_id}` · `POST /collections/{id}/share\|share-link\|join\|leave` · `GET /collections/{id}/members` · `PATCH/DELETE /collections/{id}/members/{user_id}` |
 | Học | `GET /reviews/today?mode=flashcard\|mcq\|typing&collection_id=` · `GET /reviews/summary` · `POST /reviews/{word_id}/result` |
 | Thống kê | `GET /stats/today` · `/stats/overview` · `/stats/calendar` |
-| Ứng dụng ngoài | `GET/POST /external/applications` · `DELETE /external/applications/{id}` · `POST /external/applications/{id}/keys` · `DELETE /external/keys/{id}` · (API key) `POST /external/vocabulary` · `GET /external/vocabulary/lookup` |
+| Ứng dụng ngoài | `GET/POST /external/applications` · `DELETE /external/applications/{id}` · `POST /external/applications/{id}/keys` · `DELETE /external/keys/{id}` · (API key) `POST /external/vocabulary` · `POST /external/vocabulary/batch` · `GET /external/vocabulary/lookup` · `GET /external/collections` |
 
 Mọi lỗi có chung một dạng: `{"error": {"code": "...", "message": "...", "details": ...}, "request_id": "..."}`.

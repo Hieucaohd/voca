@@ -7,7 +7,7 @@ from flask_jwt_extended import current_user, jwt_required
 from app.core.validation import parse_body
 from app.extensions import limiter
 from app.modules.external import service
-from app.modules.external.schemas import ApplicationCreate, CaptureIn, KeyCreate, application_to_dict, key_to_dict
+from app.modules.external.schemas import ApplicationCreate, BatchIn, CaptureIn, KeyCreate, application_to_dict, key_to_dict
 
 # Called by browser extensions and other apps: CORS open, API-key auth, no cookies.
 gateway = Blueprint("external_gateway", __name__)
@@ -43,6 +43,18 @@ def _authenticate():
 def capture():
     result = service.capture(g.api_key, parse_body(CaptureIn))
     return jsonify(result), 201 if result["created"] else 200
+
+
+@gateway.post("/external/vocabulary/batch")
+@limiter.limit("30/minute", key_func=_api_key_identity)
+def capture_batch():
+    return jsonify(service.capture_many(g.api_key, parse_body(BatchIn)))
+
+
+@gateway.get("/external/collections")
+@limiter.limit("60/minute", key_func=_api_key_identity)
+def list_collections():
+    return jsonify({"items": service.list_target_collections(g.api_key)})
 
 
 @gateway.get("/external/vocabulary/lookup")

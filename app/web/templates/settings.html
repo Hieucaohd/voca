@@ -86,7 +86,9 @@
     },
     "source": "realtime_caption"
   }'</pre>
-    <p class="help">Chỉ <code>word</code> là bắt buộc. Từ đã có sẽ không bị tạo trùng: Voca chỉ bổ sung nghĩa hoặc ngữ cảnh mới. Kiểm tra từ đã lưu chưa: <code>GET {{ api_base }}/external/vocabulary/lookup?word=leverage</code></p>
+    <p class="help">Chỉ <code>word</code> là bắt buộc. Từ đã có sẽ không bị tạo trùng: Voca chỉ bổ sung nghĩa, ngữ cảnh hoặc tag mới.</p>
+    <p class="help">Gửi nhiều từ một lần (tối đa 100): <code>POST {{ api_base }}/external/vocabulary/batch</code> với <code>{"items": ["hedge", {"word": "yield", "translation": "lợi suất"}]}</code>.
+      Đặc tả đầy đủ: <a href="{{ url_for('web.static', filename='openapi.yaml') }}" target="_blank" rel="noopener">OpenAPI</a>, hướng dẫn trong thư mục <code>docs/external-api</code> của repo.</p>
   </details>
 </section>
 {% endblock %}
