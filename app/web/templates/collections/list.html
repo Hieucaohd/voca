@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Bộ từ{% endblock %}
+{% block content %}
+<div class="page-head" x-data="{ open: false }">
+  <div><h1>Bộ từ</h1><p>Sắp xếp từ vựng theo chủ đề, chia sẻ với bạn bè hoặc học sinh</p></div>
+  {% if scope == 'mine' %}<button class="btn btn-primary" type="button" onclick="document.getElementById('new-collection').showModal()">+ Tạo bộ từ</button>{% endif %}
+</div>
+
+<nav class="row" style="margin-bottom:12px" aria-label="Phạm vi">
+  {% for key, label in [('mine', 'Của tôi'), ('shared', 'Được chia sẻ'), ('public', 'Công khai')] %}
+    <a class="btn btn-sm {{ 'btn-primary' if scope == key }}" href="{{ url_for('web.collections', scope=key) }}">{{ label }}</a>
+  {% endfor %}
+</nav>
+
+<section class="card">
+  {% for c, role, member in rows %}
+  <div class="tree-item" style="padding-left: {{ 4 + (depths.get(c.id, 0) * 24) }}px">
+    {% if depths.get(c.id, 0) %}<span class="tree-indent" aria-hidden="true">└</span>{% endif %}
+    <div style="flex:1;min-width:0">
+      <a class="name" href="{{ url_for('web.collection_detail', collection_id=c.id) }}">{{ c.name }}</a>
+      <div class="muted" style="font-size:13px">
+        {{ counts.get(c.id, 0) }} từ
+        {% if scope != 'mine' %} · {{ c.owner.display_name }}{% endif %}
+        {% if c.description %} · {{ c.description|truncate(80) }}{% endif %}
+      </div>
+    </div>
+    {% if c.is_system %}<span class="badge">Hệ thống</span>{% else %}<span class="badge">{{ c.visibility|visibility_label }}</span>{% endif %}
+    {% if scope != 'mine' %}<span class="badge">{{ role|role_label }}</span>{% endif %}
+  </div>
+  {% else %}
+  <div class="empty">
+    {% if scope == 'mine' %}<h3>Chưa có bộ từ</h3><p>Tạo bộ từ đầu tiên, ví dụ “IELTS Academic” hoặc “Quant Research”.</p>
+    {% elif scope == 'shared' %}<h3>Chưa có bộ từ nào được chia sẻ với bạn</h3>
+    {% else %}<h3>Chưa có bộ từ công khai</h3>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+
+<dialog id="new-collection" class="card" style="max-width:480px;width:calc(100% - 32px);border:1px solid var(--border);color:var(--text)"
+        x-data="newCollection">
+  <form @submit.prevent="submit">
+    <h2>Tạo bộ từ</h2>
+    <div class="alert alert-error" x-show="error" x-text="error"></div>
+    <div class="field"><label for="c-name">Tên *</label><input id="c-name" type="text" x-model="name" required maxlength="120"></div>
+    <div class="field"><label for="c-desc">Mô tả</label><textarea id="c-desc" x-model="description" rows="2"></textarea></div>
+    <div class="field-row">
+      <div class="field">
+        <label for="c-parent">Nằm trong</label>
+        <select id="c-parent" x-model="parent_id">
+          <option value="">— Cấp cao nhất —</option>
+          {% for p in parents %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="c-vis">Quyền xem</label>
+        <select id="c-vis" x-model="visibility">
+          <option value="private">Riêng tư</option><option value="shared">Chia sẻ</option><option value="public">Công khai</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn btn-primary" type="submit" :disabled="saving">Tạo</button>
+      <button class="btn btn-ghost" type="button" onclick="this.closest('dialog').close()">Huỷ</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener("alpine:init", () => {
+    Alpine.data("newCollection", () => ({
+      name: "", description: "", parent_id: "", visibility: "private", saving: false, error: "",
+      async submit() {
+        this.saving = true; this.error = "";
+        try {
+          const c = await voca.post("/api/v1/collections", {
+            name: this.name, description: this.description || null, parent_id: this.parent_id || null, visibility: this.visibility,
+          });
+          location.href = `/collections/${c.id}`;
+        } catch (e) { this.error = e.message; } finally { this.saving = false; }
+      },
+    }));
+  });
+</script>
+{% endblock %}

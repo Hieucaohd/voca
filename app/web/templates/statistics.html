@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "partials/_macros.html" import heatmap as heatmap_grid, state_bar %}
+{% block title %}Thống kê{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Thống kê</h1><p>Tiến độ ghi nhớ và thói quen học của bạn</p></div></div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-label">Tổng số từ</div><div class="stat-value">{{ overview.total_words }}</div><div class="stat-sub">{{ overview.learning_pool }} trong danh sách học</div></div>
+  <div class="stat"><div class="stat-label">Đã học</div><div class="stat-value">{{ overview.learned }}</div><div class="stat-sub">Đang ôn + đã thuộc</div></div>
+  <div class="stat"><div class="stat-label">Đã thuộc</div><div class="stat-value">{{ overview.mastered }}</div><div class="stat-sub">Khoảng cách ôn ≥ 30 ngày</div></div>
+  <div class="stat"><div class="stat-label">Cần ôn hôm nay</div><div class="stat-value">{{ overview.due_today }}</div></div>
+  <div class="stat"><div class="stat-label">Chuỗi hiện tại</div><div class="stat-value">{{ overview.streak.current }}</div><div class="stat-sub">Dài nhất {{ overview.streak.longest }} ngày</div></div>
+  <div class="stat"><div class="stat-label">Độ chính xác</div><div class="stat-value">{{ overview.overall_accuracy ~ '%' if overview.overall_accuracy is not none else '—' }}</div><div class="stat-sub">{{ overview.total_reviews }} lượt ôn</div></div>
+</div>
+
+<section class="card" style="margin-top:16px">
+  <div class="card-head"><h2>Trạng thái từ vựng</h2></div>
+  {{ state_bar(overview.status_counts) }}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>Hoạt động 12 tháng</h2><span class="muted">{{ overview.streak.active_days }} ngày có ôn tập</span></div>
+  {{ heatmap_grid(heatmap) }}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>30 ngày gần nhất</h2></div>
+  {% if recent %}
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead><tr><th>Ngày</th><th class="num">Lượt ôn</th><th class="num">Đúng</th><th class="num">Chính xác</th><th class="num">Từ mới</th><th class="num">Phút</th></tr></thead>
+    <tbody>
+      {% for r in recent %}
+      <tr><td>{{ r.date }}</td><td class="num">{{ r.reviews }}</td><td class="num">{{ r.correct }}</td>
+        <td class="num">{{ ((100 * r.correct / r.reviews)|round|int ~ '%') if r.reviews else '—' }}</td>
+        <td class="num">{{ r.new_learned }}</td><td class="num">{{ r.minutes }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="empty">Chưa có dữ liệu ôn tập.</p>{% endif %}
+</section>
+{% endblock %}

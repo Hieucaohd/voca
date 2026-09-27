@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Cài đặt{% endblock %}
+{% block main_class %}container narrow{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Cài đặt</h1><p>{{ current_user.email }}</p></div></div>
+
+<section class="card" x-data="profileForm">
+  <h2>Hồ sơ & mục tiêu học</h2>
+  <form @submit.prevent="save" class="stack">
+    <div class="field-row">
+      <div class="field"><label for="p-name">Tên hiển thị</label><input id="p-name" type="text" x-model="f.display_name" maxlength="100" required></div>
+      <div class="field"><label for="p-tz">Múi giờ</label>
+        <select id="p-tz" x-model="f.timezone">{% for tz in timezones %}<option value="{{ tz }}">{{ tz }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="p-goal">Mục tiêu mỗi ngày (từ)</label><input id="p-goal" type="number" min="1" max="1000" x-model.number="f.daily_goal"></div>
+      <div class="field"><label for="p-new">Từ mới tối đa / ngày</label><input id="p-new" type="number" min="0" max="200" x-model.number="f.daily_new_limit"></div>
+      <div class="field"><label for="p-rev">Lượt ôn tối đa / ngày</label><input id="p-rev" type="number" min="0" max="2000" x-model.number="f.daily_review_limit"></div>
+    </div>
+    <div class="row"><button class="btn btn-primary" type="submit">Lưu</button></div>
+  </form>
+</section>
+
+<section class="card" x-data="passwordForm">
+  <h2>Đổi mật khẩu</h2>
+  <form @submit.prevent="save" class="field-row">
+    <input type="password" x-model="current_password" placeholder="Mật khẩu hiện tại" required autocomplete="current-password">
+    <input type="password" x-model="new_password" placeholder="Mật khẩu mới (≥ 8 ký tự)" minlength="8" required autocomplete="new-password">
+    <button class="btn" type="submit">Đổi mật khẩu</button>
+  </form>
+</section>
+
+<section class="card" x-data="apps">
+  <div class="card-head"><h2>Ứng dụng kết nối & API key</h2></div>
+  <p class="text-2">Cho phép extension trình duyệt, app phụ đề (real-time caption) hay chatbot gửi từ mới vào Voca. Từ gửi đến sẽ vào bộ <strong>Hộp thư từ mới</strong> (hoặc bộ mặc định của ứng dụng).</p>
+
+  <form class="field-row" @submit.prevent="create" style="margin:12px 0">
+    <input type="text" x-model="name" placeholder="Tên ứng dụng, ví dụ: Realtime Caption" required maxlength="100">
+    <select x-model="defaultCollection">
+      <option value="">Hộp thư từ mới (mặc định)</option>
+      {% for c in collections if not c.is_system %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-primary" type="submit">+ Thêm ứng dụng</button>
+  </form>
+
+  <template x-if="newKey">
+    <div class="alert alert-success">
+      <strong>API key mới, chỉ hiển thị một lần.</strong> Hãy lưu lại ngay:
+      <div class="secret mono" style="margin-top:8px" x-text="newKey"></div>
+      <div class="row" style="margin-top:8px"><button class="btn btn-sm" type="button" @click="copy()">Sao chép</button>
+        <button class="btn btn-sm btn-ghost" type="button" @click="newKey = null; location.reload()">Tôi đã lưu</button></div>
+    </div>
+  </template>
+
+  {% for a in applications %}
+  <div class="context">
+    <div class="row between"><strong>{{ a.name }}</strong>
+      <div class="row"><button class="btn btn-sm" type="button" @click="createKey('{{ a.id }}')">Tạo key</button>
+        <button class="btn btn-sm btn-ghost btn-danger" type="button" @click="removeApp('{{ a.id }}')">Xoá</button></div></div>
+    {% for k in a.keys %}
+    <div class="row" style="font-size:13px;margin-top:6px">
+      <span class="mono">voca_{{ k.prefix }}_…</span>
+      {% if k.is_active %}<span class="badge">Đang dùng</span>{% else %}<span class="badge">Đã thu hồi</span>{% endif %}
+      <span class="muted">{{ 'Dùng lần cuối ' ~ (k.last_used_at|localdate) if k.last_used_at else 'Chưa dùng' }}</span>
+      <span class="spacer"></span>
+      {% if k.is_active %}<button class="link-btn" type="button" @click="revoke('{{ k.id }}')">Thu hồi</button>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  <details style="margin-top:12px">
+    <summary style="cursor:pointer;font-weight:600">Cách gọi API</summary>
+    <pre class="code">curl -X POST {{ api_base }}/external/vocabulary \
+  -H "X-API-Key: voca_xxxx_yyyy" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "word": "leverage",
+    "language": "en",
+    "translation": "tận dụng",
+    "meaning": "use something to maximum advantage",
+    "context": {
+      "sentence": "Financial institutions leverage derivatives...",
+      "source_title": "Quant book",
+      "location": "Chapter 3"
+    },
+    "source": "realtime_caption"
+  }'</pre>
+    <p class="help">Chỉ <code>word</code> là bắt buộc. Từ đã có sẽ không bị tạo trùng: Voca chỉ bổ sung nghĩa hoặc ngữ cảnh mới. Kiểm tra từ đã lưu chưa: <code>GET {{ api_base }}/external/vocabulary/lookup?word=leverage</code></p>
+  </details>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const PROFILE = {{ {"display_name": current_user.display_name, "timezone": current_user.timezone, "daily_goal": current_user.daily_goal, "daily_new_limit": current_user.daily_new_limit, "daily_review_limit": current_user.daily_review_limit}|tojson }};
+  document.addEventListener("alpine:init", () => {
+    Alpine.data("profileForm", () => ({
+      f: { ...PROFILE },
+      async save() {
+        try { await voca.patch("/api/v1/me", this.f); voca.toast("Đã lưu cài đặt"); } catch (e) { voca.toast(e.message, "error"); }
+      },
+    }));
+    Alpine.data("passwordForm", () => ({
+      current_password: "", new_password: "",
+      async save() {
+        try {
+          await voca.post("/api/v1/me/password", { current_password: this.current_password, new_password: this.new_password });
+          voca.toast("Đã đổi mật khẩu, vui lòng đăng nhập lại");
+          setTimeout(() => (location.href = "/login"), 1000);
+        } catch (e) { voca.toast(e.message, "error"); }
+      },
+    }));
+    Alpine.data("apps", () => ({
+      name: "", defaultCollection: "", newKey: null,
+      async create() {
+        try {
+          const app = await voca.post("/api/v1/external/applications", { name: this.name, default_collection_id: this.defaultCollection || null });
+          await this.createKey(app.id);
+        } catch (e) { voca.toast(e.message, "error"); }
+      },
+      async createKey(appId) {
+        try { this.newKey = (await voca.post(`/api/v1/external/applications/${appId}/keys`)).api_key; }
+        catch (e) { voca.toast(e.message, "error"); }
+      },
+      copy() { navigator.clipboard.writeText(this.newKey).then(() => voca.toast("Đã sao chép")); },
+      async revoke(id) {
+        if (!confirm("Thu hồi key này? Ứng dụng dùng key sẽ không gửi được từ nữa.")) return;
+        try { await voca.del(`/api/v1/external/keys/${id}`); location.reload(); } catch (e) { voca.toast(e.message, "error"); }
+      },
+      async removeApp(id) {
+        if (!confirm("Xoá ứng dụng và toàn bộ key của nó?")) return;
+        try { await voca.del(`/api/v1/external/applications/${id}`); location.reload(); } catch (e) { voca.toast(e.message, "error"); }
+      },
+    }));
+  });
+</script>
+{% endblock %}

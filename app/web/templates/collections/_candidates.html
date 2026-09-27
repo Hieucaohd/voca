@@ -1,0 +1,16 @@
+{% if items %}
+<ul class="word-list">
+  {% for v in items %}
+  <li class="word-item">
+    <div><strong>{{ v.text }}</strong></div>
+    <div class="meaning">{{ v.primary_meaning or 'Chưa có nghĩa' }}</div>
+    <div class="meta">
+      {% if v.id in in_collection %}<span class="badge">Đã có</span>
+      {% else %}<button class="btn btn-sm" type="button" @click="addWord('{{ v.id }}', $el)">+ Thêm</button>{% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted" style="margin-top:8px">Không tìm thấy từ nào trong kho của bạn.</p>
+{% endif %}

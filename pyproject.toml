@@ -1,0 +1,14 @@
+[project]
+name = "voca"
+version = "0.1.0"
+description = "Vocabulary learning with spaced repetition"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py312"

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "partials/_macros.html" import heatmap as heatmap_grid, state_bar %}
+{% block title %}Tổng quan{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Chào {{ current_user.display_name }}</h1>
+    <p>{% if today.due_remaining or today.new_available %}Hôm nay có {{ today.due_remaining }} từ cần ôn và {{ today.new_available }} từ mới.{% else %}Bạn đã hoàn thành mọi thứ cho hôm nay.{% endif %}</p>
+  </div>
+  <a class="btn btn-primary btn-lg" href="{{ url_for('web.learn') }}">{{ 'Bắt đầu học' if today.due_remaining or today.new_available else 'Vào trang học' }}</a>
+</div>
+
+<div class="grid grid-2">
+  <section class="card">
+    <div class="card-head"><h2>Mục tiêu hôm nay</h2><span class="muted">{{ today.date }}</span></div>
+    <div class="hero-goal">
+      <div class="ring" style="--p: {{ today.goal_percent }}" role="img" aria-label="Đã ôn {{ today.completed }} trên {{ today.goal }} từ">
+        <div class="ring-inner"><div><div class="ring-value">{{ today.completed }}/{{ today.goal }}</div><div class="ring-label">từ</div></div></div>
+      </div>
+      <div class="stack">
+        <div><div class="stat-label">Độ chính xác</div><div class="stat-value">{{ today.accuracy ~ '%' if today.accuracy is not none else '—' }}</div></div>
+        <div class="row" style="gap:20px">
+          <div><div class="stat-label">Lượt ôn</div><strong>{{ today.reviews }}</strong></div>
+          <div><div class="stat-label">Từ mới</div><strong>{{ today.new_learned }}</strong></div>
+          <div><div class="stat-label">Thời gian</div><strong>{{ today.time_spent_minutes }} phút</strong></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Tiến độ</h2><a href="{{ url_for('web.statistics') }}">Chi tiết →</a></div>
+    <div class="stats" style="grid-template-columns: repeat(3, 1fr)">
+      <div><div class="stat-label">Tổng số từ</div><div class="stat-value">{{ overview.total_words }}</div></div>
+      <div><div class="stat-label">Đã thuộc</div><div class="stat-value">{{ overview.mastered }}</div></div>
+      <div><div class="stat-label">Chuỗi ngày</div><div class="stat-value">{{ overview.streak.current }}</div><div class="stat-sub">Dài nhất {{ overview.streak.longest }}</div></div>
+    </div>
+    <hr class="divider">
+    {{ state_bar(overview.status_counts) }}
+  </section>
+</div>
+
+<section class="card" style="margin-top:16px">
+  <div class="card-head"><h2>Lịch hoạt động</h2><span class="muted">{{ heatmap.total_days }} ngày có ôn tập</span></div>
+  {{ heatmap_grid(heatmap) }}
+</section>
+
+{% if overview.total_words == 0 %}
+<section class="card empty" style="margin-top:16px">
+  <h3>Bắt đầu bằng việc thêm từ đầu tiên</h3>
+  <p>Lưu từ cùng câu ví dụ nơi bạn gặp nó, Voca sẽ lên lịch ôn tập cho bạn.</p>
+  <a class="btn btn-primary" href="{{ url_for('web.vocabulary_new') }}">+ Thêm từ</a>
+</section>
+{% endif %}
+{% endblock %}

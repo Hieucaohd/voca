@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Đăng nhập{% endblock %}
+{% block main_class %}auth-wrap{% endblock %}
+{% block content %}
+<div class="card auth-card">
+  <h1>Đăng nhập</h1>
+  <p class="sub">Tiếp tục hành trình ghi nhớ từ vựng của bạn</p>
+  {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="{{ url_for('web.login') }}">
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" required autofocus value="{{ email or '' }}">
+    </div>
+    <div class="field">
+      <label for="password">Mật khẩu</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+    </div>
+    <button class="btn btn-primary btn-block btn-lg" type="submit">Đăng nhập</button>
+  </form>
+  <p class="muted" style="text-align:center;margin-top:16px">Chưa có tài khoản? <a href="{{ url_for('web.register') }}">Đăng ký</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Đăng ký{% endblock %}
+{% block main_class %}auth-wrap{% endblock %}
+{% block content %}
+<div class="card auth-card">
+  <h1>Tạo tài khoản</h1>
+  <p class="sub">Mỗi ngày một chút, nhớ từ vựng lâu dài</p>
+  {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="{{ url_for('web.register') }}">
+    <div class="field">
+      <label for="display_name">Tên hiển thị</label>
+      <input id="display_name" name="display_name" type="text" required maxlength="100" autocomplete="name" value="{{ form.display_name if form else '' }}">
+    </div>
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" required autocomplete="email" value="{{ form.email if form else '' }}">
+    </div>
+    <div class="field">
+      <label for="password">Mật khẩu</label>
+      <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password">
+      <div class="help">Tối thiểu 8 ký tự</div>
+    </div>
+    <div class="field">
+      <label for="timezone">Múi giờ</label>
+      <select id="timezone" name="timezone">
+        {% for tz in timezones %}<option value="{{ tz }}" {{ 'selected' if form and form.timezone == tz }}>{{ tz }}</option>{% endfor %}
+      </select>
+      <div class="help">Dùng để tính "hôm nay" và chuỗi ngày học</div>
+    </div>
+    <button class="btn btn-primary btn-block btn-lg" type="submit">Đăng ký</button>
+  </form>
+  <p class="muted" style="text-align:center;margin-top:16px">Đã có tài khoản? <a href="{{ url_for('web.login') }}">Đăng nhập</a></p>
+</div>
+{% endblock %}

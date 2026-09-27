@@ -1,0 +1,28 @@
+{% from "partials/_macros.html" import status_badge, pagination %}
+<p class="muted" style="font-size:13px;margin:4px 0 0">{{ total }} từ</p>
+{% if items %}
+<ul class="word-list">
+  {% for w in items %}
+  <li class="word-item">
+    <div>
+      <a class="word" href="{{ url_for('web.vocabulary_detail', vocab_id=w.id) }}">{{ w.word }}</a>
+      {% if w.phonetic %}<span class="phonetic">{{ w.phonetic }}</span>{% endif %}
+    </div>
+    <div class="meaning">{{ w.meaning or 'Chưa có nghĩa' }}</div>
+    <div class="meta">
+      {{ status_badge(w.progress.status) }}
+      {% if w.progress.due_at and w.progress.status not in ('NEW', 'SUSPENDED') %}
+        <small>{{ w.progress.interval_days }} ngày</small>
+      {% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{{ pagination('web.vocabulary', query.page, pages, args, '#word-list', 'web.vocabulary_list_partial') }}
+{% else %}
+<div class="empty">
+  {% if args %}<h3>Không tìm thấy từ phù hợp</h3><p>Thử bỏ bớt bộ lọc.</p>
+  {% else %}<h3>Chưa có từ nào</h3><p>Thêm từ đầu tiên để bắt đầu học.</p>
+  <a class="btn btn-primary" href="{{ url_for('web.vocabulary_new') }}">+ Thêm từ</a>{% endif %}
+</div>
+{% endif %}

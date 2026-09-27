@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% from "partials/_macros.html" import status_badge, pagination %}
+{% block title %}{{ collection.name }}{% endblock %}
+{% block content %}
+<div x-data="collectionPage" x-cloak>
+  <div class="page-head">
+    <div>
+      {% if parent %}<a href="{{ url_for('web.collection_detail', collection_id=parent.id) }}" class="muted" style="font-size:13px">← {{ parent.name }}</a>{% endif %}
+      <h1>{{ collection.name }}</h1>
+      <p>
+        {{ total }} từ · <span class="badge">{{ 'Hệ thống' if collection.is_system else collection.visibility|visibility_label }}</span>
+        <span class="badge">{{ role|role_label }}</span>
+        {% if role != 'owner' %} · của {{ collection.owner.display_name }}{% endif %}
+      </p>
+      {% if collection.description %}<p class="text-2">{{ collection.description }}</p>{% endif %}
+    </div>
+    <div class="row">
+      <a class="btn btn-primary" href="{{ url_for('web.learn', collection_id=collection.id) }}">Học bộ này{% if summary.due or summary.new_today %} ({{ summary.due + summary.new_today }}){% endif %}</a>
+      {% if role == 'public' %}<button class="btn" type="button" @click="join()">Tham gia</button>{% endif %}
+      {% if membership %}
+        <label class="checkbox" title="Đưa từ của bộ này vào danh sách ôn hằng ngày">
+          <input type="checkbox" {{ 'checked' if membership.is_learning }} @change="toggleLearning($event.target.checked)"> Ôn hằng ngày</label>
+        <button class="btn btn-ghost" type="button" @click="leave()">Rời bộ từ</button>
+      {% endif %}
+      {% if role == 'owner' and not collection.is_system %}
+        <button class="btn" type="button" @click="tab = tab === 'settings' ? 'words' : 'settings'">Cài đặt & chia sẻ</button>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if children %}
+  <div class="row" style="margin-bottom:12px">
+    <span class="muted" style="font-size:13px">Bộ con:</span>
+    {% for c in children %}<a class="chip" href="{{ url_for('web.collection_detail', collection_id=c.id) }}">{{ c.name }}</a>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if role == 'owner' and not collection.is_system %}
+  <section class="card" x-show="tab === 'settings'" style="margin-bottom:16px">
+    <h2>Cài đặt</h2>
+    <form class="stack" @submit.prevent="saveSettings">
+      <div class="field-row">
+        <div class="field"><label for="s-name">Tên</label><input id="s-name" type="text" x-model="settings.name" maxlength="120" required></div>
+        <div class="field"><label for="s-vis">Quyền xem</label>
+          <select id="s-vis" x-model="settings.visibility"><option value="private">Riêng tư</option><option value="shared">Chia sẻ</option><option value="public">Công khai</option></select></div>
+        <div class="field"><label for="s-parent">Nằm trong</label>
+          <select id="s-parent" x-model="settings.parent_id"><option value="">— Cấp cao nhất —</option>
+            {% for p in parents %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
+      </div>
+      <div class="field"><label for="s-desc">Mô tả</label><textarea id="s-desc" x-model="settings.description" rows="2"></textarea></div>
+      <div class="row"><button class="btn btn-primary btn-sm" type="submit">Lưu</button><span class="spacer"></span>
+        <button class="btn btn-danger btn-sm" type="button" @click="destroy()">Xoá bộ từ</button></div>
+    </form>
+    <hr class="divider">
+    <h2>Chia sẻ</h2>
+    <form class="row" @submit.prevent="share">
+      <input type="email" x-model="shareEmail" placeholder="Email người nhận" required style="flex:1;min-width:200px">
+      <select x-model="shareRole" style="width:auto"><option value="viewer">Người xem</option><option value="editor">Biên tập</option></select>
+      <button class="btn btn-primary" type="submit">Mời</button>
+    </form>
+    <div style="margin-top:14px">
+      <label>Liên kết mời</label>
+      <template x-if="shareToken">
+        <div class="row"><input type="text" readonly :value="location.origin + '/join/' + shareToken" style="flex:1" @focus="$event.target.select()">
+          <button class="btn btn-sm" type="button" @click="copyLink()">Sao chép</button>
+          <button class="btn btn-sm btn-ghost" type="button" @click="setLink(false)">Tắt</button></div>
+      </template>
+      <template x-if="!shareToken"><button class="btn btn-sm" type="button" @click="setLink(true)">Tạo liên kết mời</button></template>
+      <div class="help">Ai có liên kết đều có thể tham gia với quyền xem.</div>
+    </div>
+    {% if members %}
+    <hr class="divider">
+    <h3>Thành viên ({{ members|length }})</h3>
+    <table class="table">
+      <tbody>
+      {% for m in members %}
+        <tr>
+          <td>{{ m.user.display_name }}<div class="muted" style="font-size:12px">{{ m.user.email }}</div></td>
+          <td style="width:140px">
+            <select @change="setRole('{{ m.user_id }}', $event.target.value)">
+              <option value="viewer" {{ 'selected' if m.role == 'viewer' }}>Người xem</option>
+              <option value="editor" {{ 'selected' if m.role == 'editor' }}>Biên tập</option>
+            </select>
+          </td>
+          <td style="width:60px"><button class="btn btn-ghost btn-sm btn-danger" type="button" @click="removeMember('{{ m.user_id }}')" aria-label="Xoá thành viên">✕</button></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if can_edit %}
+  <section class="card" style="margin-bottom:16px">
+    <div class="card-head"><h2>Thêm từ vào bộ</h2>
+      <a class="btn btn-sm" href="{{ url_for('web.vocabulary_new', collection_id=collection.id) }}">+ Từ mới</a></div>
+    <input type="search" name="q" placeholder="Tìm trong kho từ của bạn…" autocomplete="off"
+           hx-get="{{ url_for('web.collection_candidates', collection_id=collection.id) }}"
+           hx-trigger="input changed delay:300ms, focus once" hx-target="#candidates">
+    <div id="candidates"></div>
+  </section>
+  {% endif %}
+
+  <section class="card" id="collection-words">
+    <form class="row" method="get" style="margin-bottom:8px">
+      <input type="search" name="q" value="{{ query.q or '' }}" placeholder="Tìm trong bộ từ…" style="flex:1">
+      <button class="btn" type="submit">Tìm</button>
+    </form>
+    {% if items %}
+    <ul class="word-list">
+      {% for w in items %}
+      <li class="word-item">
+        <div><a class="word" href="{{ url_for('web.vocabulary_detail', vocab_id=w.id) }}">{{ w.word }}</a>
+          {% if w.phonetic %}<span class="phonetic">{{ w.phonetic }}</span>{% endif %}</div>
+        <div class="meaning">{{ w.meaning or 'Chưa có nghĩa' }}</div>
+        <div class="meta">
+          {{ status_badge(w.progress.status) }}
+          {% if can_edit %}<button class="btn btn-ghost btn-sm" type="button" @click="removeWord('{{ w.id }}')">Bỏ khỏi bộ</button>{% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {{ pagination('web.collection_detail', query.page, pages, dict(args, collection_id=collection.id)) }}
+    {% else %}
+    <div class="empty"><h3>Bộ từ trống</h3>{% if can_edit %}<p>Tìm từ trong kho ở trên để thêm vào.</p>{% endif %}</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const COLLECTION = {{ {"id": collection.id, "name": collection.name, "description": collection.description or "", "visibility": collection.visibility, "parent_id": collection.parent_id or "", "share_token": collection.share_token if role == "owner" else None}|tojson }};
+  const USER_ID = {{ current_user.id|tojson }};
+  document.addEventListener("alpine:init", () => {
+    Alpine.data("collectionPage", () => ({
+      tab: "words",
+      settings: { name: COLLECTION.name, description: COLLECTION.description, visibility: COLLECTION.visibility, parent_id: COLLECTION.parent_id },
+      shareEmail: "", shareRole: "viewer", shareToken: COLLECTION.share_token,
+      base: `/api/v1/collections/${COLLECTION.id}`,
+      async run(fn, message, reload = true) {
+        try { await fn(); if (message) voca.toast(message); if (reload) setTimeout(() => location.reload(), 300); }
+        catch (e) { voca.toast(e.message, "error"); }
+      },
+      saveSettings() {
+        return this.run(() => voca.patch(this.base, { ...this.settings, description: this.settings.description || null, parent_id: this.settings.parent_id || null }), "Đã lưu");
+      },
+      destroy() {
+        if (!confirm("Xoá bộ từ này? Các từ bên trong vẫn được giữ lại trong kho.")) return;
+        this.run(async () => { await voca.del(this.base); location.href = "/collections"; }, null, false);
+      },
+      share() { return this.run(() => voca.post(`${this.base}/share`, { email: this.shareEmail, role: this.shareRole }), "Đã chia sẻ"); },
+      async setLink(enabled) {
+        try { this.shareToken = (await voca.post(`${this.base}/share-link`, { enabled })).share_token; } catch (e) { voca.toast(e.message, "error"); }
+      },
+      copyLink() { navigator.clipboard.writeText(`${location.origin}/join/${this.shareToken}`).then(() => voca.toast("Đã sao chép liên kết")); },
+      setRole(userId, role) { return this.run(() => voca.patch(`${this.base}/members/${userId}`, { role }), "Đã cập nhật quyền", false); },
+      removeMember(userId) { return this.run(() => voca.del(`${this.base}/members/${userId}`), "Đã xoá thành viên"); },
+      removeWord(id) { return this.run(() => voca.del(`${this.base}/words/${id}`), "Đã bỏ khỏi bộ từ"); },
+      async addWord(id, btn) {
+        try {
+          await voca.post(`${this.base}/words`, { vocabulary_ids: [id] });
+          btn.textContent = "Đã thêm"; btn.disabled = true; voca.toast("Đã thêm vào bộ từ");
+          htmx.ajax("GET", location.href, { target: "#collection-words", select: "#collection-words", swap: "outerHTML" });
+        }
+        catch (e) { voca.toast(e.message, "error"); }
+      },
+      join() { return this.run(() => voca.post(`${this.base}/join`), "Đã tham gia bộ từ"); },
+      leave() {
+        if (!confirm("Rời bộ từ này?")) return;
+        this.run(async () => { await voca.post(`${this.base}/leave`); location.href = "/collections?scope=shared"; }, null, false);
+      },
+      toggleLearning(value) {
+        return this.run(() => voca.patch(`${this.base}/members/${USER_ID}`, { is_learning: value }), value ? "Đã đưa vào ôn hằng ngày" : "Đã bỏ khỏi ôn hằng ngày", false);
+      },
+    }));
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Từ vựng{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Từ vựng</h1><p>Kho từ của bạn, kèm nghĩa, ví dụ và ngữ cảnh</p></div>
+  <a class="btn btn-primary" href="{{ url_for('web.vocabulary_new') }}">+ Thêm từ</a>
+</div>
+
+<section class="card">
+  <form class="filters" hx-get="{{ url_for('web.vocabulary_list_partial') }}" hx-target="#word-list"
+        hx-trigger="input changed delay:300ms from:#q, change" hx-indicator="#list-loading" onsubmit="return false">
+    <div class="grow">
+      <label class="sr-only" for="q">Tìm kiếm</label>
+      <input id="q" type="search" name="q" placeholder="Tìm từ hoặc nghĩa…" value="{{ query.q or '' }}" autocomplete="off">
+    </div>
+    <div>
+      <label class="sr-only" for="status">Trạng thái</label>
+      <select id="status" name="status">
+        <option value="">Mọi trạng thái</option>
+        {% for s, label in [('DUE','Đến hạn ôn'),('NEW','Mới'),('LEARNING','Đang học'),('REVIEWING','Đang ôn'),('MASTERED','Đã thuộc'),('SUSPENDED','Tạm ngưng')] %}
+          <option value="{{ s }}" {{ 'selected' if query.status == s }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="sr-only" for="collection_id">Bộ từ</label>
+      <select id="collection_id" name="collection_id">
+        <option value="">Mọi bộ từ</option>
+        {% for c, _, _ in collections %}<option value="{{ c.id }}" {{ 'selected' if query.collection_id == c.id }}>{{ c.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="sr-only" for="tag">Thẻ</label>
+      <select id="tag" name="tag">
+        <option value="">Mọi thẻ</option>
+        {% for name, count in tags %}<option value="{{ name }}" {{ 'selected' if query.tag == name }}>{{ name }} ({{ count }})</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="sr-only" for="sort">Sắp xếp</label>
+      <select id="sort" name="sort">
+        {% for v, label in [('newest','Mới thêm'),('oldest','Cũ nhất'),('alpha','A → Z'),('due','Sắp đến hạn')] %}
+          <option value="{{ v }}" {{ 'selected' if query.sort == v }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if sources %}
+    <div class="grow">
+      <label class="sr-only" for="source_id">Nguồn</label>
+      <select id="source_id" name="source_id">
+        <option value="">Mọi nguồn (sách, bài báo, video…)</option>
+        {% for s in sources %}<option value="{{ s.id }}" {{ 'selected' if query.source_id == s.id }}>{{ s.title }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+  </form>
+  <div id="list-loading" class="htmx-indicator muted" style="font-size:13px">Đang tải…</div>
+  <div id="word-list">{% include "vocabulary/_list.html" %}</div>
+</section>
+{% endblock %}

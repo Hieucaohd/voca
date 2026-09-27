@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Sửa từ' if word else 'Thêm từ' }}{% endblock %}
+{% block main_class %}container narrow{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ 'Sửa “' ~ word.word ~ '”' if word else 'Thêm từ mới' }}</h1>
+    <p>{{ 'Cập nhật nghĩa, ví dụ và thẻ' if word else 'Càng nhiều ngữ cảnh, càng dễ nhớ' }}</p>
+  </div>
+</div>
+
+<form x-data="wordForm" x-cloak @submit.prevent="submit" class="stack">
+  <div class="alert alert-error" x-show="error" role="alert">
+    <span x-text="error"></span>
+    <template x-if="existingId"><a :href="'/vocabulary/' + existingId"> Xem từ đã có →</a></template>
+  </div>
+
+  <section class="card">
+    <div class="field-row">
+      <div class="field" style="grid-column: span 2">
+        <label for="word">Từ / cụm từ *</label>
+        <input id="word" type="text" x-model="word" required maxlength="200" autofocus autocomplete="off" autocapitalize="off">
+      </div>
+      <div class="field">
+        <label for="language">Ngôn ngữ</label>
+        <select id="language" x-model="language" {{ 'disabled' if word }}>
+          {% for lang in languages %}<option value="{{ lang.code }}">{{ lang.native_name }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="phonetic">Phiên âm</label>
+        <input id="phonetic" type="text" x-model="phonetic" placeholder="/əˈbændən/" maxlength="200">
+      </div>
+      <div class="field">
+        <label for="difficulty">Trình độ (CEFR)</label>
+        <select id="difficulty" x-model="difficulty">
+          <option value="">—</option>
+          {% for level in ['A1','A2','B1','B2','C1','C2'] %}<option>{{ level }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Nghĩa</h2><button type="button" class="btn btn-sm" @click="addSense()">+ Thêm nghĩa</button></div>
+    <template x-for="(sense, i) in senses" :key="sense.key">
+      <div class="sense">
+        <div class="row between"><strong x-text="'Nghĩa ' + (i + 1)"></strong>
+          <button type="button" class="btn btn-ghost btn-sm btn-danger" @click="senses.splice(i, 1)" x-show="senses.length > 1">Xoá</button></div>
+        <div class="field-row" style="margin-top:8px">
+          <div class="field">
+            <label>Loại từ</label>
+            <select x-model="sense.part_of_speech">
+              <option value="">—</option>
+              {% for v, label in [('noun','Danh từ'),('verb','Động từ'),('adjective','Tính từ'),('adverb','Trạng từ'),('phrase','Cụm từ'),('phrasal verb','Cụm động từ'),('idiom','Thành ngữ'),('preposition','Giới từ'),('conjunction','Liên từ'),('pronoun','Đại từ'),('interjection','Thán từ')] %}
+                <option value="{{ v }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field" style="grid-column: span 2">
+            <label>Nghĩa tiếng Việt</label>
+            <input type="text" x-model="sense.translation" placeholder="từ bỏ" maxlength="1000">
+          </div>
+        </div>
+        <div class="field">
+          <label>Định nghĩa (tiếng Anh)</label>
+          <textarea x-model="sense.definition" rows="2" placeholder="to stop doing something" maxlength="2000"></textarea>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Từ đồng nghĩa</label><input type="text" x-model="sense.synonyms" placeholder="quit, leave"></div>
+          <div class="field"><label>Từ trái nghĩa</label><input type="text" x-model="sense.antonyms" placeholder="keep"></div>
+        </div>
+        <label>Ví dụ</label>
+        <template x-for="(ex, j) in sense.examples" :key="j">
+          <div class="field-row" style="margin-bottom:8px">
+            <input type="text" x-model="ex.sentence" placeholder="He abandoned his car." style="grid-column: span 2">
+            <div class="row" style="flex-wrap:nowrap"><input type="text" x-model="ex.translation" placeholder="Bản dịch">
+              <button type="button" class="btn btn-ghost btn-sm" @click="sense.examples.splice(j, 1)" aria-label="Xoá ví dụ">✕</button></div>
+          </div>
+        </template>
+        <button type="button" class="link-btn" @click="sense.examples.push({sentence: '', translation: ''})">+ Thêm ví dụ</button>
+      </div>
+    </template>
+  </section>
+
+  {% if not word %}
+  <section class="card">
+    <div class="card-head"><h2>Ngữ cảnh</h2><span class="muted" style="font-size:13px">Nơi bạn gặp từ này</span></div>
+    <div class="field">
+      <label for="ctx-sentence">Câu gốc</label>
+      <textarea id="ctx-sentence" x-model="context.sentence" rows="2" placeholder="Financial institutions leverage derivatives to…"></textarea>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="ctx-source">Nguồn</label>
+        <input id="ctx-source" type="text" x-model="context.source_title" list="source-list" placeholder="Quant book, IELTS Cambridge 18…">
+        <datalist id="source-list">{% for s in sources %}<option value="{{ s.title }}">{% endfor %}</datalist>
+      </div>
+      <div class="field">
+        <label for="ctx-location">Vị trí</label>
+        <input id="ctx-location" type="text" x-model="context.location" placeholder="Chương 3, trang 42">
+      </div>
+    </div>
+    <div class="field">
+      <label for="ctx-url">Liên kết</label>
+      <input id="ctx-url" type="url" x-model="context.url" placeholder="https://…">
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="card">
+    <div class="field">
+      <label for="tags">Thẻ</label>
+      <input id="tags" type="text" x-model="tags" placeholder="IELTS, Business, Daily English">
+      <div class="help">Phân cách bằng dấu phẩy</div>
+    </div>
+    {% if not word and collections %}
+    <div class="field">
+      <label>Thêm vào bộ từ</label>
+      <div class="row" style="gap:12px">
+        {% for c in collections %}
+        <label class="checkbox"><input type="checkbox" value="{{ c.id }}" x-model="collection_ids"> {{ c.name }}</label>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    <div class="field">
+      <label for="notes">Ghi chú cá nhân</label>
+      <textarea id="notes" x-model="notes" rows="3" maxlength="5000"></textarea>
+    </div>
+  </section>
+
+  <div class="row">
+    <button class="btn btn-primary btn-lg" type="submit" :disabled="saving" x-text="saving ? 'Đang lưu…' : '{{ 'Lưu thay đổi' if word else 'Lưu từ' }}'"></button>
+    {% if not word %}<label class="checkbox"><input type="checkbox" x-model="addAnother"> Thêm tiếp từ khác</label>{% endif %}
+    <span class="spacer"></span>
+    <a class="btn btn-ghost" href="{{ url_for('web.vocabulary_detail', vocab_id=word.id) if word else url_for('web.vocabulary') }}">Huỷ</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const INITIAL_WORD = {{ word|tojson }};
+  const PRESET = {{ preset|tojson }};
+  let senseKey = 0;
+  const blankSense = () => ({ key: ++senseKey, part_of_speech: "", translation: "", definition: "", synonyms: "", antonyms: "", examples: [{ sentence: "", translation: "" }] });
+  const splitList = (s) => (s || "").split(",").map((x) => x.trim()).filter(Boolean);
+
+  document.addEventListener("alpine:init", () => {
+    Alpine.data("wordForm", () => ({
+      word: "", language: "en", phonetic: "", difficulty: "", notes: "", tags: "",
+      senses: [blankSense()],
+      context: { sentence: "", source_title: "", location: "", url: "" },
+      collection_ids: PRESET.collection_ids || [],
+      addAnother: false, saving: false, error: "", existingId: null,
+
+      init() {
+        const w = INITIAL_WORD;
+        if (!w) return;
+        Object.assign(this, { word: w.word, language: w.language, phonetic: w.phonetic || "", difficulty: w.difficulty || "", notes: w.notes || "", tags: w.tags.join(", ") });
+        if (w.senses.length) {
+          this.senses = w.senses.map((s) => ({
+            key: ++senseKey, part_of_speech: s.part_of_speech || "", translation: s.translation || "", definition: s.definition || "",
+            synonyms: s.synonyms.join(", "), antonyms: s.antonyms.join(", "),
+            examples: s.examples.length ? s.examples.map((e) => ({ sentence: e.sentence, translation: e.translation || "" })) : [],
+          }));
+        }
+      },
+      addSense() { this.senses.push(blankSense()); },
+      payloadSenses() {
+        return this.senses
+          .filter((s) => s.translation.trim() || s.definition.trim())
+          .map((s) => ({
+            part_of_speech: s.part_of_speech || null, translation: s.translation || null, definition: s.definition || null,
+            synonyms: splitList(s.synonyms), antonyms: splitList(s.antonyms),
+            examples: s.examples.filter((e) => e.sentence.trim()).map((e) => ({ sentence: e.sentence, translation: e.translation || null })),
+          }));
+      },
+      async submit() {
+        this.error = ""; this.existingId = null; this.saving = true;
+        const body = { word: this.word, phonetic: this.phonetic || null, difficulty: this.difficulty || null, notes: this.notes || null, senses: this.payloadSenses(), tags: splitList(this.tags) };
+        try {
+          let saved;
+          if (INITIAL_WORD) {
+            saved = await voca.put(`/api/v1/words/${INITIAL_WORD.id}`, body);
+          } else {
+            const ctx = this.context;
+            body.language = this.language;
+            body.collection_ids = this.collection_ids;
+            body.contexts = ctx.sentence.trim() || ctx.source_title.trim() || ctx.url.trim()
+              ? [{ sentence: ctx.sentence || null, source_title: ctx.source_title || null, location: ctx.location || null, url: ctx.url || null }] : [];
+            saved = await voca.post("/api/v1/words", body);
+          }
+          if (this.addAnother && !INITIAL_WORD) {
+            voca.toast(`Đã lưu “${saved.word}”`);
+            // Keep the source: several words usually come from the same book/article.
+            const source = this.context.source_title;
+            Object.assign(this, { word: "", phonetic: "", difficulty: "", notes: "", senses: [blankSense()], context: { sentence: "", source_title: source, location: "", url: "" } });
+            document.getElementById("word").focus();
+          } else {
+            location.href = `/vocabulary/${saved.id}`;
+          }
+        } catch (e) {
+          this.error = e.message;
+          this.existingId = e.data && e.data.error && e.data.error.details && e.data.error.details.existing_id;
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } finally {
+          this.saving = false;
+        }
+      },
+    }));
+  });
+</script>
+{% endblock %}

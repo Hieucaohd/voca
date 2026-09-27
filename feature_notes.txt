@@ -1,0 +1,9 @@
+Ý tưởng về app giống tính năng học từ mới của 4english (gọi là app voca)
+- Hãy liệt kê ra các tính năng của phần học từ mới của 4english trước: lập lộ trình để học từ mới
+- sau đó sẽ bảo AI cần làm phần nào
+- Ý tưởng ban đầu: gặp từ mới, hỏi chatgpt, sau đó tự động lưu lại iịnh nghĩa vào app
+- có nhiều nguồn có thể connect tới và gửi các từ mới tới app này, ví dụ app real time caption sẽ có thể 1 tab để có thể hỏi từ mới và gửi từ mới tới app voca
+
+
+
+

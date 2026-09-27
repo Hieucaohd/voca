@@ -1,0 +1,53 @@
+{% macro status_badge(status) -%}
+  {%- set s = (status or 'NEW') -%}
+  <span class="badge"><span class="swatch s-{{ s|lower }}"></span>{{ s|status_label }}</span>
+{%- endmacro %}
+
+{% macro heatmap(data, title='Hoạt động') -%}
+<div class="heatmap-wrap" role="img" aria-label="{{ title }}: {{ data.total_days }} ngày có ôn tập">
+  <div class="heatmap">
+    {% for column in data.columns %}
+      {% set month = data.months | selectattr('index', 'equalto', loop.index0) | first %}
+      <span class="month">{{ month.label if month else '' }}</span>
+      {% for day in column %}
+        <span class="cell l{{ day.level }}{{ ' future' if day.future }}"
+              {% if not day.future %}title="{{ day.date.strftime('%d/%m/%Y') }}: {{ day.reviews }} lượt ôn{% if day.accuracy is not none %} · {{ day.accuracy }}% đúng{% endif %}"{% endif %}></span>
+      {% endfor %}
+    {% endfor %}
+  </div>
+</div>
+<div class="heat-legend" aria-hidden="true">
+  Ít <span class="cell" style="background:var(--heat-0)"></span><span class="cell" style="background:var(--heat-1)"></span><span class="cell" style="background:var(--heat-2)"></span><span class="cell" style="background:var(--heat-3)"></span><span class="cell" style="background:var(--heat-4)"></span> Nhiều
+</div>
+{%- endmacro %}
+
+{% macro state_bar(counts) -%}
+  {%- set order = ['NEW', 'LEARNING', 'REVIEWING', 'MASTERED', 'SUSPENDED'] -%}
+  {%- set total = namespace(v=0) -%}
+  {%- for k in order %}{% set total.v = total.v + (counts.get(k, 0)) %}{% endfor -%}
+  {% if total.v %}
+  <div class="statebar" role="img" aria-label="Phân bố trạng thái từ vựng">
+    {% for k in order if counts.get(k, 0) %}
+      <span class="s-{{ k|lower }}" style="flex: {{ counts[k] }}" title="{{ k|status_label }}: {{ counts[k] }}"></span>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <div class="legend">
+    {% for k in order if counts.get(k, 0) or k != 'SUSPENDED' %}
+      <span class="legend-item"><span class="swatch s-{{ k|lower }}"></span>{{ k|status_label }} <strong>{{ counts.get(k, 0) }}</strong></span>
+    {% endfor %}
+  </div>
+{%- endmacro %}
+
+{% macro pagination(endpoint, page, pages, args, target=None, hx_endpoint=None) -%}
+  {% if pages > 1 %}
+  <nav class="pagination" aria-label="Phân trang">
+    {% for p in range(1, pages + 1) %}
+      {% if p == 1 or p == pages or (p - page)|abs <= 2 %}
+        <a class="btn btn-sm {{ 'btn-primary' if p == page }}" href="{{ url_for(endpoint, page=p, **args) }}"
+           {% if target %}hx-get="{{ url_for(hx_endpoint or endpoint, page=p, **args) }}" hx-target="{{ target }}"{% endif %}>{{ p }}</a>
+      {% elif (p - page)|abs == 3 %}<span class="muted">…</span>{% endif %}
+    {% endfor %}
+  </nav>
+  {% endif %}
+{%- endmacro %}

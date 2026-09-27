@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}Học{% endblock %}
+{% block content %}
+<div class="learn-shell" x-data="learnSession" x-cloak @keydown.window="onKey($event)">
+
+  <!-- ---------------- setup ---------------- -->
+  <template x-if="phase === 'setup'">
+    <div>
+      <div class="page-head"><div><h1>Học & ôn tập</h1>
+        <p>{% if collection %}Bộ từ “{{ collection.name }}”{% else %}Tất cả từ trong danh sách học của bạn{% endif %}</p></div></div>
+      <div class="stats" style="margin-bottom:16px">
+        <div class="stat"><div class="stat-label">Cần ôn</div><div class="stat-value">{{ summary.due }}</div></div>
+        <div class="stat"><div class="stat-label">Từ mới hôm nay</div><div class="stat-value">{{ summary.new_today }}</div>
+          <div class="stat-sub">{{ summary.new_available }} từ chưa học</div></div>
+      </div>
+      <section class="card">
+        <h2>Chế độ</h2>
+        <div class="mode-picker">
+          <label class="mode-option"><input type="radio" value="flashcard" x-model="mode"><strong>Flashcard</strong><span>Tự nhớ lại rồi tự đánh giá</span></label>
+          <label class="mode-option"><input type="radio" value="mcq" x-model="mode"><strong>Trắc nghiệm</strong><span>Chọn nghĩa đúng trong 4 đáp án</span></label>
+          <label class="mode-option"><input type="radio" value="typing" x-model="mode"><strong>Gõ từ</strong><span>Nhìn nghĩa, gõ lại từ tiếng Anh</span></label>
+        </div>
+        <div class="field" style="margin-top:16px">
+          <label for="collection">Bộ từ</label>
+          <select id="collection" x-model="collectionId">
+            <option value="">Tất cả (danh sách học hằng ngày)</option>
+            {% for c, role in collections %}<option value="{{ c.id }}">{{ c.name }}{% if role != 'owner' %} · {{ c.owner.display_name }}{% endif %}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary btn-lg btn-block" type="button" @click="start()" :disabled="loading"
+                x-text="loading ? 'Đang chuẩn bị…' : 'Bắt đầu'"></button>
+        {% if not summary.due and not summary.new_today %}
+        <p class="muted" style="margin-top:12px;text-align:center">Không có từ nào đến hạn.
+          {% if summary.new_available == 0 %}<a href="{{ url_for('web.vocabulary_new') }}">Thêm từ mới</a>{% else %}Bạn đã học đủ số từ mới hôm nay; có thể tăng giới hạn trong <a href="{{ url_for('web.settings') }}">Cài đặt</a>.{% endif %}</p>
+        {% endif %}
+      </section>
+    </div>
+  </template>
+
+  <!-- ---------------- session ---------------- -->
+  <template x-if="phase === 'session' && card">
+    <div>
+      <div class="learn-top">
+        <button class="btn btn-ghost btn-sm" type="button" @click="finish()" aria-label="Kết thúc">✕</button>
+        <div class="progress" role="progressbar" :aria-valuenow="done" :aria-valuemax="total"><span :style="`width:${total ? 100 * done / total : 0}%`"></span></div>
+        <span class="muted mono" x-text="`${done}/${total}`"></span>
+      </div>
+
+      <div class="card relative flashcard">
+        <span class="badge kind-tag" x-text="card.kind === 'new' ? 'Từ mới' : 'Ôn tập'"></span>
+
+        <!-- prompt -->
+        <template x-if="mode !== 'typing'">
+          <div>
+            <div class="front-word" x-text="card.word"></div>
+            <div class="row" style="justify-content:center">
+              <span class="muted mono" x-text="card.phonetic || ''"></span>
+              <button class="btn btn-ghost btn-sm" type="button" @click="speak(card)" aria-label="Nghe">🔊</button>
+            </div>
+          </div>
+        </template>
+        <template x-if="mode === 'typing'">
+          <div>
+            <div class="muted" style="font-size:13px">Gõ từ có nghĩa</div>
+            <div style="font-size:1.6rem;font-weight:700;margin:8px 0" x-text="card.quiz.prompt"></div>
+            <div class="muted"><span class="pos" x-text="card.quiz.part_of_speech || ''"></span> · <span class="mono" x-text="card.quiz.hint"></span></div>
+          </div>
+        </template>
+
+        <!-- flashcard -->
+        <template x-if="mode === 'flashcard'">
+          <div>
+            <template x-if="!revealed">
+              <button class="btn btn-lg" style="margin-top:24px" type="button" @click="reveal()">Hiện đáp án <span class="kbd">Space</span></button>
+            </template>
+            <template x-if="revealed">
+              <div class="answer" x-html="answerHtml(card)"></div>
+            </template>
+          </div>
+        </template>
+
+        <!-- multiple choice -->
+        <template x-if="mode === 'mcq'">
+          <div>
+            <div class="options">
+              <template x-for="(opt, i) in card.quiz.options" :key="i">
+                <button type="button" class="btn option" :disabled="!!result"
+                        :class="result && (opt === result.correct_answer ? 'correct' : (opt === selected ? 'wrong' : ''))"
+                        @click="answer(opt)"><span class="key" x-text="i + 1"></span><span x-text="opt"></span></button>
+              </template>
+            </div>
+            <label class="checkbox" style="justify-content:center;margin-top:12px" x-show="!result">
+              <input type="checkbox" x-model="guessing"> Tôi chỉ đoán thôi</label>
+          </div>
+        </template>
+
+        <!-- typing -->
+        <template x-if="mode === 'typing'">
+          <form @submit.prevent="result ? next() : answer(typed)" style="margin-top:20px">
+            <input class="typing-input" type="text" x-model="typed" x-ref="typing" :readonly="!!result"
+                   autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Gõ câu trả lời…" aria-label="Câu trả lời">
+            <div class="row" style="justify-content:center;margin-top:12px" x-show="!result">
+              <button class="btn btn-primary" type="submit" :disabled="!typed.trim() || busy">Kiểm tra <span class="kbd">Enter</span></button>
+              <button class="btn btn-ghost" type="button" @click="answer('')">Không nhớ</button>
+            </div>
+          </form>
+        </template>
+
+        <!-- feedback -->
+        <template x-if="result && mode !== 'flashcard'">
+          <div>
+            <div class="feedback" :class="result.verdict === 'exact' ? 'ok' : result.verdict === 'close' ? 'close' : 'bad'">
+              <span x-text="result.verdict === 'exact' ? '✓ Chính xác!' : result.verdict === 'close' ? '≈ Gần đúng, chú ý chính tả' : '✗ Chưa đúng'"></span>
+              <span class="spacer"></span><small x-text="'Ôn lại sau ' + result.next_review_in"></small>
+            </div>
+            <div class="answer" x-html="answerHtml(card)"></div>
+            <button class="btn btn-primary btn-lg btn-block" style="margin-top:16px" type="button" @click="next()" x-ref="nextBtn">Tiếp tục <span class="kbd">Enter</span></button>
+          </div>
+        </template>
+      </div>
+
+      <template x-if="mode === 'flashcard' && revealed">
+        <div class="grade-grid">
+          <template x-for="(g, i) in grades" :key="g.key">
+            <button type="button" class="btn grade-btn" :class="'grade-' + g.key" :disabled="busy" @click="grade(g.key)">
+              <span x-text="g.label"></span><small x-text="card.preview[g.key]"></small>
+            </button>
+          </template>
+        </div>
+      </template>
+    </div>
+  </template>
+
+  <!-- ---------------- done ---------------- -->
+  <template x-if="phase === 'done'">
+    <div class="card empty">
+      <h1 x-text="stats.reviewed ? 'Hoàn thành!' : 'Không có từ nào cần học'"></h1>
+      <template x-if="stats.reviewed">
+        <div class="stats" style="margin:20px 0;text-align:left">
+          <div class="stat"><div class="stat-label">Lượt ôn</div><div class="stat-value" x-text="stats.reviewed"></div></div>
+          <div class="stat"><div class="stat-label">Chính xác</div><div class="stat-value" x-text="Math.round(100 * stats.correct / stats.reviewed) + '%'"></div></div>
+          <div class="stat"><div class="stat-label">Từ mới</div><div class="stat-value" x-text="stats.newWords"></div></div>
+        </div>
+      </template>
+      <p x-show="!stats.reviewed">Hãy quay lại sau, hoặc thêm từ mới để học.</p>
+      <div class="row" style="justify-content:center">
+        <a class="btn btn-primary" href="{{ url_for('web.dashboard') }}">Về tổng quan</a>
+        <button class="btn" type="button" @click="phase = 'setup'; location.reload()">Học tiếp</button>
+      </div>
+    </div>
+  </template>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const PRESET_COLLECTION = {{ (collection.id if collection else "")|tojson }};
+  const PRESET_MODE = {{ mode|tojson }};
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+  document.addEventListener("alpine:init", () => {
+    Alpine.data("learnSession", () => ({
+      phase: "setup", mode: ["flashcard", "mcq", "typing"].includes(PRESET_MODE) ? PRESET_MODE : "flashcard",
+      collectionId: PRESET_COLLECTION, loading: false, busy: false,
+      queue: [], card: null, done: 0, total: 0,
+      revealed: false, selected: null, typed: "", guessing: false, result: null, shownAt: 0,
+      stats: { reviewed: 0, correct: 0, newWords: 0 },
+      grades: [
+        { key: "again", label: "Quên" }, { key: "hard", label: "Khó" },
+        { key: "good", label: "Nhớ" }, { key: "easy", label: "Dễ" },
+      ],
+
+      async start() {
+        this.loading = true;
+        try {
+          const params = new URLSearchParams({ mode: this.mode });
+          if (this.collectionId) params.set("collection_id", this.collectionId);
+          const data = await voca.get(`/api/v1/reviews/today?${params}`);
+          this.queue = data.items;
+          this.total = this.queue.length;
+          if (!this.total) { this.phase = "done"; return; }
+          this.phase = "session";
+          this.show();
+        } catch (e) { voca.toast(e.message, "error"); } finally { this.loading = false; }
+      },
+      show() {
+        this.card = this.queue.shift() || null;
+        if (!this.card) { this.phase = "done"; return; }
+        Object.assign(this, { revealed: false, selected: null, typed: "", guessing: false, result: null, shownAt: performance.now() });
+        if (this.mode === "typing") this.$nextTick(() => this.$refs.typing && this.$refs.typing.focus());
+      },
+      reveal() { this.revealed = true; },
+      elapsed() { return Math.round(performance.now() - this.shownAt); },
+
+      async submit(body) {
+        this.busy = true;
+        try {
+          const res = await voca.post(`/api/v1/reviews/${this.card.id}/result`, { mode: this.mode, client_review_id: voca.uuid(), response_ms: this.elapsed(), ...body });
+          this.stats.reviewed += 1;
+          if (res.is_correct) this.stats.correct += 1;
+          if (this.card.kind === "new" && !this.card._requeued) this.stats.newWords += 1;
+          if (!res.is_correct) {  // relearn later in this session
+            this.queue.push({ ...this.card, kind: "review", _requeued: true, preview: { ...this.card.preview, again: "10 phút" } });
+            this.total += 1;
+          }
+          return res;
+        } catch (e) { voca.toast(e.message, "error"); return null; } finally { this.busy = false; }
+      },
+      async grade(key) {
+        if (this.busy) return;
+        const res = await this.submit({ grade: key });
+        if (res) { this.done += 1; this.show(); }
+      },
+      async answer(value) {
+        if (this.busy || this.result) return;
+        this.selected = value;
+        const res = await this.submit({ answer: value, confident: !this.guessing });
+        if (res) { this.result = res; this.done += 1; this.$nextTick(() => this.$refs.nextBtn && this.$refs.nextBtn.focus()); }
+      },
+      next() { if (this.result) this.show(); },
+      finish() { if (confirm("Kết thúc phiên học?")) this.phase = "done"; },
+
+      speak(card) {
+        if (!("speechSynthesis" in window)) return;
+        const u = new SpeechSynthesisUtterance(card.word);
+        u.lang = card.language === "en" ? "en-US" : card.language;
+        speechSynthesis.cancel(); speechSynthesis.speak(u);
+      },
+      answerHtml(card) {
+        let html = "";
+        if (this.mode === "typing") html += `<div style="font-size:1.4rem;font-weight:800">${esc(card.word)} <span class="muted mono" style="font-size:14px;font-weight:400">${esc(card.phonetic || "")}</span></div>`;
+        for (const s of card.senses || []) {
+          html += `<div class="sense">${s.part_of_speech ? `<span class="pos">${esc(s.part_of_speech)}</span> ` : ""}`;
+          if (s.translation) html += `<div style="font-weight:600;font-size:1.1rem">${esc(s.translation)}</div>`;
+          if (s.definition) html += `<div class="text-2">${esc(s.definition)}</div>`;
+          for (const e of (s.examples || []).slice(0, 2)) html += `<div class="example"><div>${esc(e.sentence)}</div>${e.translation ? `<div class="tr">${esc(e.translation)}</div>` : ""}</div>`;
+          html += "</div>";
+        }
+        const ctx = (card.contexts || []).find((c) => c.sentence);
+        if (ctx) html += `<div class="context" style="margin-top:8px"><blockquote>${esc(ctx.sentence)}</blockquote><small class="muted">${esc(ctx.source ? ctx.source.title : "")}</small></div>`;
+        return html || `<p class="muted">Chưa có nghĩa.</p>`;
+      },
+      onKey(e) {
+        if (this.phase !== "session" || !this.card || e.target.tagName === "SELECT") return;
+        const typingField = e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA";
+        if (this.mode === "flashcard") {
+          if (!this.revealed && (e.key === " " || e.key === "Enter")) { e.preventDefault(); this.reveal(); }
+          else if (this.revealed && ["1", "2", "3", "4"].includes(e.key)) this.grade(this.grades[+e.key - 1].key);
+        } else if (this.mode === "mcq") {
+          if (!this.result && ["1", "2", "3", "4"].includes(e.key)) { const opt = this.card.quiz.options[+e.key - 1]; if (opt) this.answer(opt); }
+          else if (this.result && e.key === "Enter") { e.preventDefault(); this.next(); }
+        } else if (this.result && e.key === "Enter" && !typingField) { e.preventDefault(); this.next(); }
+      },
+    }));
+  });
+</script>
+{% endblock %}

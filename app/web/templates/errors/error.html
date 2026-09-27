@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Lỗi {{ status }}{% endblock %}
+{% block content %}
+<div class="card empty" style="max-width:520px;margin:40px auto">
+  <h1 style="font-size:3rem;margin:0">{{ status }}</h1>
+  <p>{{ message }}</p>
+  <a class="btn btn-primary" href="{{ url_for('web.index') }}">Về trang chủ</a>
+</div>
+{% endblock %}
