@@ -25,6 +25,7 @@ def create_app(config_name: str | None = None, overrides: dict | None = None) ->
     if overrides:
         app.config.update(overrides)
 
+    _check_secrets(app)
     _configure_database(app)
     if app.config["APP_ENV"] == "production":
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
@@ -62,6 +63,15 @@ def create_app(config_name: str | None = None, overrides: dict | None = None) ->
         return redirect(url_for("web.static", filename="favicon.svg"))
 
     return app
+
+
+def _check_secrets(app: Flask) -> None:
+    if app.config["APP_ENV"] != "production":
+        return
+    for key in ("SECRET_KEY", "JWT_SECRET_KEY"):
+        value = app.config.get(key) or ""
+        if value.startswith("dev-") or len(value) < 32:
+            raise RuntimeError(f"Production requires a strong {key} (at least 32 characters)")
 
 
 def _configure_database(app: Flask) -> None:

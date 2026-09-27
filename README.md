@@ -51,8 +51,14 @@ pytest
    # đặt tạm 2 biến TURSO_* (lấy từ Vercel) trong .env rồi:
    flask db upgrade
    ```
-4. **Deploy:** `vercel deploy --prod`, hoặc push lên GitHub nếu đã nối repo với Vercel.
+4. **Deploy:** push lên nhánh `main` (repo đã nối với Vercel nên tự deploy), hoặc chạy `vercel deploy --prod`.
 5. Kiểm tra `https://<domain>/healthz` trả về `{"status": "ok"}`.
+
+Lưu ý khi deploy:
+
+- Vercel cài thư viện từ `pyproject.toml` (không đọc `requirements.txt`). Thêm thư viện mới thì sửa cả hai file.
+- Entrypoint được khai báo trong `[tool.vercel]` của `pyproject.toml` (`api.index:app`). Function chạy ở Tokyo (`hnd1`), cùng vùng với database.
+- File tĩnh nằm ở `public/static`: trên Vercel CDN phục vụ trực tiếp, ở local Flask phục vụ.
 
 Mỗi lần đổi model thì chạy `flask db migrate -m "..."` ở local, kiểm tra file sinh ra trong `migrations/versions/`, rồi `flask db upgrade` cho cả local và Turso.
 
@@ -75,6 +81,7 @@ Chỉ `word` là bắt buộc. Kết quả trả `201` khi tạo mới, `200` kh
 
 ```
 api/index.py            entry cho Vercel
+public/static/          CSS, JS, favicon
 app/
   core/                 config dùng chung: DB types, lỗi, log, text, múi giờ, dialect libSQL
   ports/                interface cho storage và AI enrichment (implement sau)
@@ -86,7 +93,7 @@ app/
     learning/           hàng đợi ôn, chấm bài, trạng thái thẻ
     stats/              số liệu dashboard, streak, lịch hoạt động
     external/           ứng dụng ngoài, API key, endpoint thu thập từ
-  web/                  trang Jinja, CSS, JS
+  web/                  trang Jinja (templates)
 migrations/             Alembic
 tests/                  unit (engine) + integration (API, web, driver libSQL)
 ```

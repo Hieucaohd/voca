@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from functools import wraps
+from pathlib import Path
 from urllib.parse import urlparse
 
 from flask import Blueprint, current_app, g, redirect, request, url_for
@@ -13,7 +14,10 @@ from app.extensions import db
 from app.modules.auth import service as auth_service
 from app.modules.auth.models import User
 
-bp = Blueprint("web", __name__, template_folder="templates", static_folder="static", static_url_path="/static")
+# Static files live in public/static: Vercel's CDN serves public/** directly in production,
+# while Flask serves the same /static/... URLs locally.
+STATIC_DIR = Path(__file__).resolve().parents[2] / "public" / "static"
+bp = Blueprint("web", __name__, template_folder="templates", static_folder=str(STATIC_DIR), static_url_path="/static")
 
 
 def _decode(token: str | None, expected_type: str) -> dict | None:
