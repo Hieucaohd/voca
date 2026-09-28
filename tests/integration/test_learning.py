@@ -1,8 +1,16 @@
 from datetime import date, datetime, timedelta, timezone
 
+import pytest
+
 from app.extensions import db
 from app.modules.learning.models import CardProgress, DailyActivity
 from app.modules.stats.service import streaks
+
+
+@pytest.fixture(autouse=True)
+def _studying_inbox(alice):
+    """Words only enter the queue through a started collection; every word here lands in the Inbox."""
+    alice.start()
 
 
 def _queue(api, mode="flashcard", **params):
@@ -13,7 +21,7 @@ def _queue(api, mode="flashcard", **params):
 
 
 def test_new_words_respect_daily_limit(alice):
-    alice.patch("/api/v1/me", {"daily_new_limit": 2})
+    alice.patch(f"/api/v1/collections/{alice.inbox_id}/study", {"new_per_day": 2})
     for w in ("one", "two", "three"):
         alice.add_word(w)
     body = _queue(alice)

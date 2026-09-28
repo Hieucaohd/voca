@@ -8,10 +8,9 @@ from sqlalchemy import func, select
 from app.core.clock import local_day_bounds, local_today, utcnow
 from app.extensions import db
 from app.modules.auth.models import User
-from app.modules.collections import access
+from app.modules.learning import planner
 from app.modules.learning.engine import ACTIVE_STATUSES, Status
 from app.modules.learning.models import CardProgress, DailyActivity, ReviewLog
-from app.modules.learning.service import new_remaining_today
 from app.modules.learning.service import summary as queue_summary
 from app.modules.vocabulary.models import Vocabulary
 
@@ -36,7 +35,7 @@ def today(user: User) -> dict:
         "reviews": reviews,
         "accuracy": round(100 * correct / reviews) if reviews else None,
         "new_learned": activity.new_learned if activity else 0,
-        "new_remaining": new_remaining_today(user, now),
+        "new_remaining": queue["new_today"],
         "time_spent_minutes": round((activity.time_spent_ms if activity else 0) / 60000, 1),
         "due_remaining": queue["due"],
         "new_available": queue["new_today"],
@@ -62,7 +61,7 @@ def streaks(active_days: set[date], today_: date) -> tuple[int, int]:
 
 def overview(user: User) -> dict:
     now = utcnow()
-    pool = access.learnable_vocabulary_ids(user.id)
+    pool = planner.learning_pool_ids(user.id)
     total_own = db.session.scalar(select(func.count()).select_from(Vocabulary).where(Vocabulary.owner_id == user.id)) or 0
     total_pool = db.session.scalar(select(func.count()).select_from(Vocabulary).where(Vocabulary.id.in_(pool))) or 0
 

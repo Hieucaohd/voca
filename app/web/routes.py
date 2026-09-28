@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from flask import current_app, flash, g, make_response, redirect, render_template, request, url_for
 from flask_jwt_extended import set_access_cookies, set_refresh_cookies, unset_jwt_cookies
@@ -15,6 +15,7 @@ from app.modules.collections import access
 from app.modules.collections import service as collections_service
 from app.modules.collections.models import CollectionWord
 from app.modules.external import service as external_service
+from app.modules.learning import planner
 from app.modules.learning import service as learning_service
 from app.modules.stats import service as stats_service
 from app.modules.vocabulary import service as vocabulary_service
@@ -135,11 +136,13 @@ def _heatmap(user, weeks: int) -> dict:
 @login_required
 def dashboard():
     user = g.user
+    plans = planner.list_plans(user.id, active_only=True)
     return render_template(
         "dashboard.html",
         today=stats_service.today(user),
         overview=stats_service.overview(user),
         heatmap=_heatmap(user, 17),
+        plans=[(p, planner.plan_overview(user, p)) for p in plans],
     )
 
 
@@ -247,11 +250,14 @@ def collections():
     rows = collections_service.list_collections(g.user.id, scope)
     counts = collections_service.word_counts([c.id for c, _, _ in rows])
     depths = collections_service.depth_map([c for c, _, _ in rows]) if scope == "mine" else {}
+    row_ids = {c.id for c, _, _ in rows}
+    plans = {p.collection_id: (p, planner.plan_overview(g.user, p)) for p in planner.list_plans(g.user.id) if p.collection_id in row_ids}
     return render_template(
         "collections/list.html",
         scope=scope,
         rows=rows,
         counts=counts,
+        plans=plans,
         depths=depths,
         parents=[c for c, _, _ in collections_service.list_collections(g.user.id, "mine") if not c.is_system],
     )
@@ -261,6 +267,7 @@ def collections():
 @login_required
 def collection_detail(collection_id: str):
     collection, role = collections_service.get_readable(g.user.id, collection_id)
+    plan = planner.get_plan(g.user.id, collection.id)
     request_args = request.args.to_dict() | {"collection_id": collection.id}
     query = parse_data(VocabularyQuery, request_args)
     items, total = vocabulary_service.search(g.user.id, query)
@@ -282,7 +289,8 @@ def collection_detail(collection_id: str):
         children=[c for c, _, _ in mine if c.parent_id == collection.id],
         parent=collections_service.get_readable(g.user.id, collection.parent_id)[0] if collection.parent_id and role == "owner" else None,
         parents=[c for c, _, _ in mine if not c.is_system and c.id != collection.id],
-        summary=learning_service.summary(g.user, collection.id),
+        plan=plan,
+        overview=planner.plan_overview(g.user, plan) if plan else None,
     )
 
 
@@ -317,14 +325,34 @@ def join_by_token(token: str):
 def learn():
     collection_id = request.args.get("collection_id") or None
     collection = collections_service.get_readable(g.user.id, collection_id)[0] if collection_id else None
-    mine = collections_service.list_collections(g.user.id, "mine")
-    shared = collections_service.list_collections(g.user.id, "shared")
     return render_template(
         "learn/index.html",
         collection=collection,
-        collections=[(c, r) for c, r, _ in mine + shared],
+        plans=planner.list_plans(g.user.id, active_only=True),
         summary=learning_service.summary(g.user, collection_id),
         mode=request.args.get("mode", "flashcard"),
+    )
+
+
+@bp.get("/schedule")
+@login_required
+def schedule():
+    collection_id = request.args.get("collection_id") or None
+    collection = None
+    if collection_id:
+        collection = collections_service.get_readable(g.user.id, collection_id)[0]
+        plan = planner.get_plan(g.user.id, collection_id)
+        if plan is None or not plan.is_active:
+            flash("Bộ từ này chưa được bắt đầu học nên chưa có lịch.", "info")
+            return redirect(url_for("web.collection_detail", collection_id=collection_id))
+    days = min(max(request.args.get("days", 14, type=int), 7), 60)
+    plans = planner.list_plans(g.user.id, active_only=True)
+    return render_template(
+        "schedule.html",
+        collection=collection,
+        plans=plans,
+        days=[dict(d, date_obj=date.fromisoformat(d["date"])) for d in planner.calendar(g.user, days, collection_id)] if plans else [],
+        day_count=days,
     )
 
 

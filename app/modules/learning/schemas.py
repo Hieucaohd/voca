@@ -35,3 +35,8 @@ class ReviewIn(BaseModel):
         if self.mode in ("mcq", "typing") and self.answer is None:
             raise ValueError("Chế độ này cần câu trả lời (answer)")
         return self
+
+
+class StudyPlanIn(BaseModel):
+    new_per_day: int | None = Field(default=None, ge=0, le=200)
+    status: Literal["active", "paused"] | None = None

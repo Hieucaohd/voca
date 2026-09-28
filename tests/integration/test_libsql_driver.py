@@ -31,10 +31,13 @@ def test_full_flow_on_libsql(libsql_client):
     word = alice.add_word("leverage", "đòn bẩy", tags=["Finance"], contexts=[{"sentence": "Banks leverage capital.", "source_title": "Quant"}])
     assert alice.post("/api/v1/words", {"word": "Leverage"}).status_code == 409  # IntegrityError path via dedup check
 
+    alice.start()
     queue = alice.get("/api/v1/reviews/today").get_json()["items"]
     assert [i["word"] for i in queue] == ["leverage"]
     result = alice.post(f"/api/v1/reviews/{word['id']}/result", {"mode": "flashcard", "grade": "good"}).get_json()
     assert result["progress"]["interval_days"] == 1
     assert alice.get("/api/v1/stats/today").get_json()["completed"] == 1
     assert alice.get("/api/v1/words?q=đòn").get_json()["total"] == 1
+    days = alice.get("/api/v1/study/calendar?days=3").get_json()["days"]
+    assert [d["review_count"] for d in days] == [0, 1, 0]
     assert alice.delete(f"/api/v1/words/{word['id']}").status_code == 204

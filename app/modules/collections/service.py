@@ -178,6 +178,7 @@ def delete_collection(user_id: str, collection_id: str) -> None:
         child.parent_id = collection.parent_id
     db.session.execute(delete(CollectionWord).where(CollectionWord.collection_id == collection.id))
     db.session.execute(delete(CollectionMember).where(CollectionMember.collection_id == collection.id))
+    _delete_study_plans(collection.id)
     db.session.delete(collection)
     db.session.commit()
 
@@ -267,16 +268,11 @@ def share(user_id: str, collection_id: str, data: ShareIn) -> CollectionMember:
 
 
 def update_member(user_id: str, collection_id: str, member_user_id: str, data: MemberUpdate) -> CollectionMember:
+    get_owned(user_id, collection_id)
     member = membership(collection_id, member_user_id)
     if member is None:
         raise NotFound("Không tìm thấy thành viên")
-    if data.role is not None:
-        get_owned(user_id, collection_id)
-        member.role = data.role
-    if data.is_learning is not None:
-        if member_user_id != user_id:
-            raise PermissionDenied("Chỉ thành viên đó mới đổi được cài đặt học")
-        member.is_learning = data.is_learning
+    member.role = data.role
     db.session.commit()
     return member
 
@@ -288,6 +284,9 @@ def remove_member(user_id: str, collection_id: str, member_user_id: str) -> None
     if member is None:
         raise NotFound("Không tìm thấy thành viên")
     db.session.delete(member)
+    collection = _get(collection_id)
+    if collection.visibility != "public":  # access is gone, so is the study plan
+        _delete_study_plans(collection_id, member_user_id)
     db.session.commit()
 
 
@@ -324,6 +323,15 @@ def regenerate_share_token(user_id: str, collection_id: str, enabled: bool = Tru
         collection.visibility = "shared"
     db.session.commit()
     return collection
+
+
+def _delete_study_plans(collection_id: str, user_id: str | None = None) -> None:
+    from app.modules.learning.models import StudyPlan  # learning depends on collections, not the reverse
+
+    stmt = delete(StudyPlan).where(StudyPlan.collection_id == collection_id)
+    if user_id is not None:
+        stmt = stmt.where(StudyPlan.user_id == user_id)
+    db.session.execute(stmt)
 
 
 def membership(collection_id: str, user_id: str) -> CollectionMember | None:

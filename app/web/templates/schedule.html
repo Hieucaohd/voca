@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Lịch học{% endblock %}
+{% set weekdays = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'] %}
+{% macro word_chips(words, kind) -%}
+  {% set visible = 40 %}
+  <div class="chips">
+    {% for w in words[:visible] %}
+      <a class="word-chip {{ kind }}" href="{{ url_for('web.vocabulary_detail', vocab_id=w.id) }}" title="{{ w.meaning or 'Chưa có nghĩa' }}">{{ w.word }}</a>
+    {% endfor %}
+    {% if words|length > visible %}
+      <details class="more"><summary>+{{ words|length - visible }} từ</summary>
+        {% for w in words[visible:] %}<a class="word-chip {{ kind }}" href="{{ url_for('web.vocabulary_detail', vocab_id=w.id) }}" title="{{ w.meaning }}">{{ w.word }}</a>{% endfor %}
+      </details>
+    {% endif %}
+  </div>
+{%- endmacro %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Lịch học</h1>
+    <p>{% if collection %}Bộ từ “{{ collection.name }}”{% else %}Các bộ từ đang học{% endif %} · {{ day_count }} ngày tới</p>
+  </div>
+  {% if plans %}
+  <a class="btn btn-primary" href="{{ url_for('web.learn', collection_id=collection.id) if collection else url_for('web.learn') }}">Học hôm nay</a>
+  {% endif %}
+</div>
+
+{% if not plans %}
+<section class="card empty">
+  <h3>Chưa có lịch học</h3>
+  <p>Lịch chỉ gồm các bộ từ bạn đã bấm “Bắt đầu học”.</p>
+  <a class="btn btn-primary" href="{{ url_for('web.collections') }}">Chọn bộ từ để bắt đầu</a>
+</section>
+{% else %}
+<nav class="row" style="margin-bottom:8px" aria-label="Lọc theo bộ từ">
+  <a class="btn btn-sm {{ 'btn-primary' if not collection }}" href="{{ url_for('web.schedule', days=day_count) }}">Tất cả</a>
+  {% for p in plans %}
+    <a class="btn btn-sm {{ 'btn-primary' if collection and collection.id == p.collection_id }}"
+       href="{{ url_for('web.schedule', collection_id=p.collection_id, days=day_count) }}">{{ p.collection.name }}</a>
+  {% endfor %}
+  <span class="spacer"></span>
+  {% for n in [7, 14, 30] %}
+    <a class="btn btn-sm btn-ghost {{ 'active-range' if day_count == n }}" href="{{ url_for('web.schedule', collection_id=collection.id if collection else None, days=n) }}">{{ n }} ngày</a>
+  {% endfor %}
+</nav>
+<p class="muted" style="font-size:13px;margin:0 0 16px">
+  Từ mới được xếp theo thứ tự bạn thêm vào bộ. Ngày ôn của một từ mới chỉ có sau khi bạn học nó lần đầu (tuỳ bạn nhớ tốt hay chưa).
+</p>
+
+<div class="schedule">
+  {% for day in days %}
+    {% set d = day.date_obj %}
+    <section class="card schedule-day{{ ' is-today' if day.is_today }}{{ ' is-empty' if not day.collections }}">
+      <div class="schedule-day-head">
+        <div>
+          <strong>{{ 'Hôm nay' if day.is_today else ('Ngày mai' if loop.index0 == 1 else weekdays[d.weekday()]) }}</strong>
+          <span class="muted">{{ d.strftime('%d/%m') }}</span>
+        </div>
+        {% if day.collections %}
+          <span class="text-2" style="font-size:13px">{{ day.review_count }} ôn · {{ day.new_count }} mới</span>
+        {% else %}
+          <span class="muted" style="font-size:13px">Không có từ nào</span>
+        {% endif %}
+      </div>
+      {% for group in day.collections %}
+        <div class="schedule-group">
+          {% if not collection %}
+            <a class="schedule-collection" href="{{ url_for('web.collection_detail', collection_id=group.collection_id) }}">{{ group.collection_name }}</a>
+          {% endif %}
+          {% if group.reviews %}
+            <div class="schedule-kind"><span class="kind-label">Ôn tập ({{ group.reviews|length }})</span>{{ word_chips(group.reviews, 'review') }}</div>
+          {% endif %}
+          {% if group.new %}
+            <div class="schedule-kind"><span class="kind-label">Từ mới ({{ group.new|length }})</span>{{ word_chips(group.new, 'new') }}</div>
+          {% endif %}
+        </div>
+      {% endfor %}
+      {% if day.is_today and day.collections %}
+        <a class="btn btn-sm btn-primary" style="margin-top:10px" href="{{ url_for('web.learn', collection_id=collection.id) if collection else url_for('web.learn') }}">Học ngay</a>
+      {% endif %}
+    </section>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

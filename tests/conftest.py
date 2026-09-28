@@ -54,6 +54,18 @@ class Api:
     def delete(self, url, **kw):
         return self.client.delete(url, headers=self.headers, **kw)
 
+    @property
+    def inbox_id(self) -> str:
+        items = self.get("/api/v1/collections").get_json()["items"]
+        return next(c["id"] for c in items if c["system_key"] == "inbox")
+
+    def start(self, collection_id: str | None = None, new_per_day: int | None = None) -> dict:
+        """Starts studying a collection (the Inbox by default)."""
+        body = {} if new_per_day is None else {"new_per_day": new_per_day}
+        res = self.post(f"/api/v1/collections/{collection_id or self.inbox_id}/study", body)
+        assert res.status_code == 201, res.get_json()
+        return res.get_json()
+
     def add_word(self, word: str, translation: str = "nghĩa", **extra) -> dict:
         payload = {"word": word, "senses": [{"translation": translation, "part_of_speech": "noun"}], **extra}
         res = self.post("/api/v1/words", payload)

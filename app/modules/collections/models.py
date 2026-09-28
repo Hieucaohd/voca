@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import TimestampMixin, UTCDateTime, id_column, utcnow
@@ -52,7 +52,6 @@ class CollectionMember(db.Model):
     collection_id: Mapped[str] = mapped_column(ForeignKey("collections.id", ondelete="CASCADE"))
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     role: Mapped[str] = mapped_column(String(10), default="viewer")
-    is_learning: Mapped[bool] = mapped_column(Boolean, default=True)
     joined_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     user = relationship("User")

@@ -251,7 +251,8 @@ def create_vocabulary(
     db.session.add(vocab)
     db.session.flush()
 
-    for collection_id in data.collection_ids:
+    # Every word lives in at least one collection, so it can be scheduled once that collection is started.
+    for collection_id in data.collection_ids or [collections_service.ensure_inbox(user.id).id]:
         collections_service.add_words(user.id, collection_id, [vocab.id], commit=False)
     if commit:
         db.session.commit()

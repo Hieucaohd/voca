@@ -5,7 +5,7 @@
 <div class="page-head">
   <div>
     <h1>Chào {{ current_user.display_name }}</h1>
-    <p>{% if today.due_remaining or today.new_available %}Hôm nay có {{ today.due_remaining }} từ cần ôn và {{ today.new_available }} từ mới.{% else %}Bạn đã hoàn thành mọi thứ cho hôm nay.{% endif %}</p>
+    <p>{% if not plans %}Hãy bắt đầu học một bộ từ để có lịch học hằng ngày.{% elif today.due_remaining or today.new_available %}Hôm nay có {{ today.due_remaining }} từ cần ôn và {{ today.new_available }} từ mới.{% else %}Bạn đã học xong mọi thứ cho hôm nay.{% endif %}</p>
   </div>
   <a class="btn btn-primary btn-lg" href="{{ url_for('web.learn') }}">{{ 'Bắt đầu học' if today.due_remaining or today.new_available else 'Vào trang học' }}</a>
 </div>
@@ -41,6 +41,27 @@
 </div>
 
 <section class="card" style="margin-top:16px">
+  <div class="card-head"><h2>Bộ từ đang học</h2><a href="{{ url_for('web.schedule') }}">Lịch học →</a></div>
+  {% for plan, ov in plans %}
+  <div class="tree-item">
+    <div style="flex:1;min-width:0">
+      <a class="name" href="{{ url_for('web.collection_detail', collection_id=plan.collection_id) }}">{{ plan.collection.name }}</a>
+      <div class="muted" style="font-size:13px">Đã học {{ ov.started_words }}/{{ ov.total_words }} từ · {{ ov.new_per_day }} từ mới/ngày</div>
+    </div>
+    {% if ov.todo_today %}
+      <span class="text-2" style="font-size:13px">{{ ov.due_today }} ôn · {{ ov.new_today }} mới</span>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('web.learn', collection_id=plan.collection_id) }}">Học</a>
+    {% else %}
+      <span class="badge" style="color:var(--good-ink)">✓ Xong hôm nay</span>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="muted">Chưa học bộ từ nào. Mở một bộ từ và bấm “Bắt đầu học” để Voca lên lịch cho bạn.
+    <a href="{{ url_for('web.collections') }}">Chọn bộ từ →</a></p>
+  {% endfor %}
+</section>
+
+<section class="card">
   <div class="card-head"><h2>Lịch hoạt động</h2><span class="muted">{{ heatmap.total_days }} ngày có ôn tập</span></div>
   {{ heatmap_grid(heatmap) }}
 </section>

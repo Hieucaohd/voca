@@ -83,21 +83,34 @@ def test_share_viewer_and_editor(alice, bob, client):
     assert bob.get(f"/api/v1/collections/{c['id']}").status_code == 404
 
 
-def test_public_join_adds_words_to_learning_queue(alice, bob):
+def test_public_collection_is_only_learned_after_starting(alice, bob):
     c = _create(alice, "Public deck", visibility="public")
     alice.add_word("serendipity", "tình cờ may mắn", collection_ids=[c["id"]])
 
     listed = [x["name"] for x in bob.get("/api/v1/collections?scope=public").get_json()["items"]]
     assert listed == ["Public deck"]
     assert bob.get(f"/api/v1/collections/{c['id']}").get_json()["role"] == "public"
+
+    # Joining alone does not schedule anything.
+    assert bob.post(f"/api/v1/collections/{c['id']}/join").status_code == 200
     assert bob.get("/api/v1/reviews/today").get_json()["items"] == []
 
-    assert bob.post(f"/api/v1/collections/{c['id']}/join").status_code == 200
-    queue = bob.get("/api/v1/reviews/today").get_json()["items"]
-    assert [i["word"] for i in queue] == ["serendipity"]
+    bob.start(c["id"])
+    assert [i["word"] for i in bob.get("/api/v1/reviews/today").get_json()["items"]] == ["serendipity"]
 
-    # opting out of daily learning removes them from the queue
-    bob.patch(f"/api/v1/collections/{c['id']}/members/{bob.user['id']}", {"is_learning": False})
+    # Leaving a public collection keeps the plan readable; leaving a private one drops it.
+    assert bob.post(f"/api/v1/collections/{c['id']}/leave").status_code == 204
+    assert [p["collection_id"] for p in bob.get("/api/v1/study/plans").get_json()["items"]] == [c["id"]]
+
+
+def test_losing_access_removes_the_plan(alice, bob):
+    c = _create(alice, "Private deck")
+    alice.add_word("secretive", collection_ids=[c["id"]])
+    alice.post(f"/api/v1/collections/{c['id']}/share", {"email": "bob@example.com"})
+    bob.start(c["id"])
+    assert len(bob.get("/api/v1/reviews/today").get_json()["items"]) == 1
+    alice.delete(f"/api/v1/collections/{c['id']}/members/{bob.user['id']}")
+    assert bob.get("/api/v1/study/plans").get_json()["items"] == []
     assert bob.get("/api/v1/reviews/today").get_json()["items"] == []
 
 

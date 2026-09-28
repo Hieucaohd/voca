@@ -5,7 +5,7 @@ collection tables themselves.
 """
 from __future__ import annotations
 
-from sqlalchemy import and_, exists, or_, select, union
+from sqlalchemy import exists, or_, select
 from sqlalchemy.sql import Select
 
 from app.extensions import db
@@ -76,20 +76,6 @@ def can_edit_vocabulary(user_id: str, vocab: Vocabulary) -> bool:
         .limit(1)
     )
     return db.session.scalar(stmt) is not None
-
-
-def learnable_vocabulary_ids(user_id: str) -> Select:
-    """Words in the learner's daily queue: their own + joined collections marked for learning."""
-    own = select(Vocabulary.id.label("vid")).where(Vocabulary.owner_id == user_id)
-    joined = (
-        select(CollectionWord.vocabulary_id.label("vid"))
-        .join(
-            CollectionMember,
-            and_(CollectionMember.collection_id == CollectionWord.collection_id, CollectionMember.user_id == user_id),
-        )
-        .where(CollectionMember.is_learning.is_(True))
-    )
-    return select(union(own, joined).subquery().c.vid)
 
 
 def collection_vocabulary_ids(collection_id: str) -> Select:

@@ -17,7 +17,7 @@ Thiết kế chi tiết (ERD, API, thuật toán): [docs/DESIGN.md](docs/DESIGN.
 | Từ vựng | Nhiều nghĩa cho một từ (loại từ, định nghĩa, bản dịch, đồng/trái nghĩa, ví dụ), phiên âm, CEFR, thẻ, ghi chú, **ngữ cảnh**: câu gốc + nguồn + vị trí |
 | Tìm kiếm | Theo từ hoặc nghĩa, lọc theo trạng thái, bộ từ, thẻ, nguồn; sắp xếp |
 | Bộ từ | Lồng nhau, “Hộp thư từ mới” mặc định, chia sẻ riêng tư/chia sẻ/công khai, vai trò người xem/biên tập, link mời, tham gia bộ công khai |
-| Học | Flashcard (Quên/Khó/Nhớ/Dễ, hiện trước khoảng cách ôn), trắc nghiệm, gõ từ (chấp nhận sai 1 ký tự), phím tắt, “Tôi đã biết”, tạm ngưng, học lại |
+| Học | Bấm **Bắt đầu học** ở từng bộ từ để lên lịch (chọn số từ mới mỗi ngày); bộ chưa bắt đầu thì chưa học. Nút **Học hôm nay** theo từng bộ. **Lịch học** theo ngày: từ nào, của bộ nào, ôn hay mới. Flashcard, trắc nghiệm, gõ từ, phím tắt, “Tôi đã biết”, tạm ngưng, học lại |
 | Thống kê | Mục tiêu ngày, độ chính xác, chuỗi ngày học, phân bố trạng thái, lịch hoạt động 12 tháng |
 | API ngoài | API key cho từng ứng dụng (extension, app phụ đề, chatbot), thêm một hoặc nhiều từ (tối đa 100/request) kiểu upsert: từ đã có thì chỉ bổ sung nghĩa, ngữ cảnh, tag mới |
 
@@ -103,6 +103,7 @@ Tiền tố `/api/v1`. Xác thực bằng `Authorization: Bearer <access_token>`
 | Từ vựng | `GET/POST /words` · `GET/PUT/DELETE /words/{id}` · `POST /words/{id}/contexts` · `POST /words/{id}/known\|suspend\|unsuspend\|reset` · `GET /tags` · `GET/POST /sources` · `GET /languages` |
 | Bộ từ | `GET/POST /collections` · `GET/PATCH/DELETE /collections/{id}` · `POST /collections/{id}/words` · `DELETE /collections/{id}/words/{word_id}` · `POST /collections/{id}/share\|share-link\|join\|leave` · `GET /collections/{id}/members` · `PATCH/DELETE /collections/{id}/members/{user_id}` |
 | Học | `GET /reviews/today?mode=flashcard\|mcq\|typing&collection_id=` · `GET /reviews/summary` · `POST /reviews/{word_id}/result` |
+| Kế hoạch học | `POST/GET/PATCH/DELETE /collections/{id}/study` (bắt đầu, xem, đổi số từ mới/ngày hoặc tạm dừng, bỏ) · `GET /study/plans` · `GET /study/calendar?days=14&collection_id=` |
 | Thống kê | `GET /stats/today` · `/stats/overview` · `/stats/calendar` |
 | Ứng dụng ngoài | `GET/POST /external/applications` · `DELETE /external/applications/{id}` · `POST /external/applications/{id}/keys` · `DELETE /external/keys/{id}` · (API key) `POST /external/vocabulary` · `POST /external/vocabulary/batch` · `GET /external/vocabulary/lookup` · `GET /external/collections` |
 

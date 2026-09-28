@@ -24,7 +24,7 @@ bp = Blueprint("collections_api", __name__)
 def list_collections():
     rows = service.list_collections(current_user.id, request.args.get("scope", "mine"))
     counts = service.word_counts([c.id for c, _, _ in rows])
-    return jsonify({"items": [collection_to_dict(c, role, counts.get(c.id, 0), m) for c, role, m in rows]})
+    return jsonify({"items": [collection_to_dict(c, role, counts.get(c.id, 0)) for c, role, _ in rows]})
 
 
 @bp.post("/collections")
@@ -39,7 +39,7 @@ def create_collection():
 def get_collection(collection_id: str):
     collection, role = service.get_readable(current_user.id, collection_id)
     count = service.word_counts([collection.id]).get(collection.id, 0)
-    return jsonify(collection_to_dict(collection, role, count, service.membership(collection.id, current_user.id)))
+    return jsonify(collection_to_dict(collection, role, count))
 
 
 @bp.patch("/collections/<collection_id>")
@@ -110,7 +110,7 @@ def remove_member(collection_id: str, user_id: str):
 def join(collection_id: str):
     token = parse_body(JoinIn).token if request.is_json else None
     member = service.join(current_user.id, collection_id, token)
-    return jsonify({"collection_id": collection_id, "role": member.role, "is_learning": member.is_learning})
+    return jsonify({"collection_id": collection_id, "role": member.role})
 
 
 @bp.post("/collections/<collection_id>/leave")

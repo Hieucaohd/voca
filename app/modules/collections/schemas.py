@@ -38,15 +38,14 @@ class ShareIn(BaseModel):
 
 
 class MemberUpdate(BaseModel):
-    role: Literal["viewer", "editor"] | None = None
-    is_learning: bool | None = None
+    role: Literal["viewer", "editor"]
 
 
 class JoinIn(BaseModel):
     token: str | None = None
 
 
-def collection_to_dict(collection, role: str | None, word_count: int | None = None, member=None) -> dict:
+def collection_to_dict(collection, role: str | None, word_count: int | None = None) -> dict:
     data = {
         "id": collection.id,
         "name": collection.name,
@@ -63,8 +62,6 @@ def collection_to_dict(collection, role: str | None, word_count: int | None = No
     }
     if word_count is not None:
         data["word_count"] = word_count
-    if member is not None:
-        data["is_learning"] = member.is_learning
     if role == "owner":
         data["share_token"] = collection.share_token
     return data
@@ -76,6 +73,5 @@ def member_to_dict(member) -> dict:
         "display_name": member.user.display_name,
         "email": member.user.email,
         "role": member.role,
-        "is_learning": member.is_learning,
         "joined_at": member.joined_at.isoformat(),
     }

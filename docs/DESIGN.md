@@ -205,7 +205,8 @@ Chung cho mọi bảng: `id` là UUID dạng chuỗi, `created_at`, `updated_at`
 |---|---|---|
 | `collections` | owner_id, parent_id (self FK), name, description, visibility (`private`/`shared`/`public`), system_key (`inbox`), share_token (link mời), language_code | Có thể lồng nhau (IELTS → Academic words) |
 | `collection_words` | collection_id, vocabulary_id, added_by, position, added_at (PK kép) | N–N: một từ có thể nằm trong nhiều collection |
-| `collection_members` | collection_id, user_id, role (`viewer`/`editor`), is_learning (bool), joined_at, UNIQUE(collection_id, user_id) | Chính là "SharePermission". Owner lấy từ `collections.owner_id` |
+| `collection_members` | collection_id, user_id, role (`viewer`/`editor`), joined_at, UNIQUE(collection_id, user_id) | Chính là "SharePermission". Owner lấy từ `collections.owner_id` |
+| `study_plans` | user_id, collection_id, status (`active`/`paused`), new_per_day, started_at, paused_at, UNIQUE(user_id, collection_id) | Kế hoạch học một bộ từ; chỉ từ thuộc bộ có kế hoạch `active` mới được lên lịch |
 
 Quy tắc phân quyền:
 - `private`: chỉ owner xem được.
@@ -375,11 +376,17 @@ Với người học trả lời Good đều đặn, lịch sẽ là **1 → 3 �
 
 Server chấm lại đáp án (không tin kết quả `is_correct` từ client với MCQ/typing).
 
-### 5.4 Queue hằng ngày
+### 5.4 Kế hoạch học (study plan) và queue hằng ngày
 
-1. Các từ **đến hạn**: `due_at ≤ cuối ngày hôm nay (theo tz user)`, sắp theo `due_at`, tối đa `daily_review_limit`.
-2. **Từ mới**: những từ user truy cập được (từ của mình và từ trong collection có `is_learning=true`) mà chưa có `card_progress`, tối đa `daily_new_limit − số từ mới đã học hôm nay`.
-3. Từ vừa bị AGAIN được đưa lại cuối phiên.
+Từ chỉ được lên lịch qua **kế hoạch học** của một bộ từ (`study_plans`: user, collection, status `active`/`paused`, `new_per_day`). Bộ chưa bấm “Bắt đầu học” thì từ trong đó không vào queue và không có lịch. Từ tạo tay không chọn bộ sẽ vào Inbox, nên từ nào cũng có đường vào lịch.
+
+1. **Ôn tập**: `card_progress` đang học (LEARNING/REVIEWING/MASTERED) của từ thuộc các bộ đang học, `due_at < cuối ngày hôm nay (tz user)`, sắp theo `due_at`, tối đa `daily_review_limit`.
+2. **Từ mới**: mỗi kế hoạch được `new_per_day − số từ của bộ đó học lần đầu hôm nay` suất; từ chưa học được lấy theo thứ tự thêm vào bộ (`collection_words.added_at`). Từ thuộc nhiều bộ chỉ được giới thiệu một lần.
+3. Suất từ mới được **tính động mỗi ngày**: bỏ lỡ một ngày thì lịch lùi lại chứ không dồn, từ thêm sau vào cuối hàng.
+4. **Lịch học** (`GET /study/calendar`) ghép (1) theo ngày đến hạn thật (quá hạn tính vào hôm nay) và (2) chia từ mới theo `new_per_day` cho các ngày tới. Lịch ôn của từ chưa học chưa xác định nên không hiển thị.
+5. Từ vừa bị AGAIN được đưa lại cuối phiên và đến hạn sau 10 phút.
+
+Migration `87c8a28876b1` tạo sẵn kế hoạch cho các bộ mà user đã học dở, và đưa từ không thuộc bộ nào vào Inbox.
 
 ---
 

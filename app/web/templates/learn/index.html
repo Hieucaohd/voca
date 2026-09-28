@@ -7,13 +7,35 @@
   <template x-if="phase === 'setup'">
     <div>
       <div class="page-head"><div><h1>Học & ôn tập</h1>
-        <p>{% if collection %}Bộ từ “{{ collection.name }}”{% else %}Tất cả từ trong danh sách học của bạn{% endif %}</p></div></div>
+        <p>{% if collection %}Bộ từ “{{ collection.name }}”{% else %}Tất cả các bộ từ đang học{% endif %}</p></div>
+        <a class="btn" href="{{ url_for('web.schedule', collection_id=collection.id) if collection and summary.started and summary.status == 'active' else url_for('web.schedule') }}">Lịch học</a></div>
+
+      {% if collection and (not summary.started or summary.status != 'active') %}
+      <section class="card empty">
+        <h3>{{ 'Bộ từ đang tạm dừng' if summary.started else 'Bộ từ này chưa được bắt đầu học' }}</h3>
+        <p>Các từ chỉ được lên lịch học sau khi bạn bấm “{{ 'Tiếp tục học' if summary.started else 'Bắt đầu học' }}” ở trang bộ từ.</p>
+        <a class="btn btn-primary" href="{{ url_for('web.collection_detail', collection_id=collection.id) }}">Đến bộ từ “{{ collection.name }}”</a>
+      </section>
+      {% elif not collection and not plans %}
+      <section class="card empty">
+        <h3>Bạn chưa bắt đầu học bộ từ nào</h3>
+        <p>Mở một bộ từ (ví dụ “Hộp thư từ mới”) và bấm “Bắt đầu học”. Voca sẽ lên lịch từ mới và ôn tập cho bạn mỗi ngày.</p>
+        <a class="btn btn-primary" href="{{ url_for('web.collections') }}">Chọn bộ từ</a>
+      </section>
+      {% else %}
       <div class="stats" style="margin-bottom:16px">
-        <div class="stat"><div class="stat-label">Cần ôn</div><div class="stat-value">{{ summary.due }}</div></div>
+        <div class="stat"><div class="stat-label">Cần ôn hôm nay</div><div class="stat-value">{{ summary.due }}</div></div>
         <div class="stat"><div class="stat-label">Từ mới hôm nay</div><div class="stat-value">{{ summary.new_today }}</div>
           <div class="stat-sub">{{ summary.new_available }} từ chưa học</div></div>
       </div>
       <section class="card">
+        {% if not summary.due and not summary.new_today %}
+        <div class="empty" style="padding:16px 8px">
+          <h3>✓ Hôm nay đã học xong</h3>
+          <p>Không còn từ nào cần học hôm nay{% if collection %} trong bộ “{{ collection.name }}”{% endif %}. Hẹn gặp lại ngày mai!</p>
+          <a class="btn" href="{{ url_for('web.schedule') }}">Xem lịch các ngày tới</a>
+        </div>
+        {% endif %}
         <h2>Chế độ</h2>
         <div class="mode-picker">
           <label class="mode-option"><input type="radio" value="flashcard" x-model="mode"><strong>Flashcard</strong><span>Tự nhớ lại rồi tự đánh giá</span></label>
@@ -22,18 +44,15 @@
         </div>
         <div class="field" style="margin-top:16px">
           <label for="collection">Bộ từ</label>
-          <select id="collection" x-model="collectionId">
-            <option value="">Tất cả (danh sách học hằng ngày)</option>
-            {% for c, role in collections %}<option value="{{ c.id }}">{{ c.name }}{% if role != 'owner' %} · {{ c.owner.display_name }}{% endif %}</option>{% endfor %}
+          <select id="collection" x-model="collectionId" @change="location.href = '/learn?mode=' + mode + (collectionId ? '&collection_id=' + collectionId : '')">
+            <option value="">Tất cả các bộ đang học</option>
+            {% for p in plans %}<option value="{{ p.collection_id }}">{{ p.collection.name }}{% if p.collection.owner_id != current_user.id %} · {{ p.collection.owner.display_name }}{% endif %}</option>{% endfor %}
           </select>
         </div>
-        <button class="btn btn-primary btn-lg btn-block" type="button" @click="start()" :disabled="loading"
+        <button class="btn btn-primary btn-lg btn-block" type="button" @click="start()" :disabled="loading || {{ 'true' if not summary.due and not summary.new_today else 'false' }}"
                 x-text="loading ? 'Đang chuẩn bị…' : 'Bắt đầu'"></button>
-        {% if not summary.due and not summary.new_today %}
-        <p class="muted" style="margin-top:12px;text-align:center">Không có từ nào đến hạn.
-          {% if summary.new_available == 0 %}<a href="{{ url_for('web.vocabulary_new') }}">Thêm từ mới</a>{% else %}Bạn đã học đủ số từ mới hôm nay; có thể tăng giới hạn trong <a href="{{ url_for('web.settings') }}">Cài đặt</a>.{% endif %}</p>
-        {% endif %}
       </section>
+      {% endif %}
     </div>
   </template>
 

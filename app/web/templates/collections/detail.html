@@ -15,18 +15,65 @@
       {% if collection.description %}<p class="text-2">{{ collection.description }}</p>{% endif %}
     </div>
     <div class="row">
-      <a class="btn btn-primary" href="{{ url_for('web.learn', collection_id=collection.id) }}">Học bộ này{% if summary.due or summary.new_today %} ({{ summary.due + summary.new_today }}){% endif %}</a>
       {% if role == 'public' %}<button class="btn" type="button" @click="join()">Tham gia</button>{% endif %}
-      {% if membership %}
-        <label class="checkbox" title="Đưa từ của bộ này vào danh sách ôn hằng ngày">
-          <input type="checkbox" {{ 'checked' if membership.is_learning }} @change="toggleLearning($event.target.checked)"> Ôn hằng ngày</label>
-        <button class="btn btn-ghost" type="button" @click="leave()">Rời bộ từ</button>
-      {% endif %}
+      {% if membership %}<button class="btn btn-ghost" type="button" @click="leave()">Rời bộ từ</button>{% endif %}
       {% if role == 'owner' and not collection.is_system %}
         <button class="btn" type="button" @click="tab = tab === 'settings' ? 'words' : 'settings'">Cài đặt & chia sẻ</button>
       {% endif %}
     </div>
   </div>
+
+  <section class="card study-card" style="margin-bottom:16px">
+    {% if not plan %}
+      <div class="row between" style="align-items:flex-end">
+        <div>
+          <h2 style="margin:0">Chưa bắt đầu học</h2>
+          <p class="text-2" style="margin:4px 0 0">Bấm bắt đầu để Voca lên lịch học {{ total }} từ trong bộ này. Trước đó, các từ chưa được đưa vào lịch ôn.</p>
+        </div>
+        <form class="row" @submit.prevent="startPlan()">
+          <label class="row" style="margin:0;font-weight:500;color:var(--text-2)">Từ mới mỗi ngày
+            <input type="number" x-model.number="newPerDay" min="1" max="200" style="width:84px"></label>
+          <button class="btn btn-primary" type="submit" :disabled="busy">Bắt đầu học</button>
+        </form>
+      </div>
+    {% else %}
+      <div class="row between">
+        <h2 style="margin:0">{{ 'Đang học' if plan.status == 'active' else 'Đang tạm dừng' }}</h2>
+        <span class="muted" style="font-size:13px">Bắt đầu {{ plan.started_at|localdate }}</span>
+      </div>
+      <div class="progress" style="margin:12px 0 6px" role="img" aria-label="Đã học {{ overview.started_words }} trên {{ overview.total_words }} từ">
+        <span style="width: {{ (100 * overview.started_words / overview.total_words) if overview.total_words else 0 }}%"></span>
+      </div>
+      <p class="text-2" style="font-size:14px;margin:0 0 14px">
+        Đã học {{ overview.started_words }}/{{ overview.total_words }} từ
+        {% if overview.days_to_finish_new %} · còn khoảng {{ overview.days_to_finish_new }} ngày để học hết từ mới{% elif plan.status == 'active' and overview.unseen_words == 0 %} · đã học hết từ mới, tiếp tục ôn theo lịch{% endif %}
+      </p>
+      {% if plan.status == 'active' %}
+        <div class="stats" style="grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));margin-bottom:14px">
+          <div><div class="stat-label">Cần ôn hôm nay</div><div class="stat-value">{{ overview.due_today }}</div></div>
+          <div><div class="stat-label">Từ mới hôm nay</div><div class="stat-value">{{ overview.new_today }}</div><div class="stat-sub">Đã học {{ overview.learned_today }}/{{ plan.new_per_day }}</div></div>
+        </div>
+        <div class="row">
+          {% if overview.todo_today %}
+            <a class="btn btn-primary btn-lg" href="{{ url_for('web.learn', collection_id=collection.id) }}">Học hôm nay ({{ overview.todo_today }})</a>
+          {% else %}
+            <span class="btn btn-lg" aria-disabled="true" style="cursor:default;color:var(--good-ink)">✓ Đã học xong hôm nay</span>
+          {% endif %}
+          <a class="btn" href="{{ url_for('web.schedule', collection_id=collection.id) }}">Lịch học</a>
+          <span class="spacer"></span>
+          <form class="row" @submit.prevent="savePerDay()">
+            <label class="row" style="margin:0;font-weight:500;color:var(--text-2)">Từ mới/ngày
+              <input type="number" x-model.number="newPerDay" min="0" max="200" style="width:76px"></label>
+            <button class="btn btn-sm" type="submit">Lưu</button>
+          </form>
+          <button class="btn btn-sm btn-ghost" type="button" @click="setPlanStatus('paused')">Tạm dừng</button>
+        </div>
+      {% else %}
+        <p class="text-2">Khi tạm dừng, các từ trong bộ này không xuất hiện trong lịch học. Tiến độ vẫn được giữ nguyên.</p>
+        <button class="btn btn-primary" type="button" @click="setPlanStatus('active')">Tiếp tục học</button>
+      {% endif %}
+    {% endif %}
+  </section>
 
   {% if children %}
   <div class="row" style="margin-bottom:12px">
@@ -132,7 +179,7 @@
 {% block scripts %}
 <script>
   const COLLECTION = {{ {"id": collection.id, "name": collection.name, "description": collection.description or "", "visibility": collection.visibility, "parent_id": collection.parent_id or "", "share_token": collection.share_token if role == "owner" else None}|tojson }};
-  const USER_ID = {{ current_user.id|tojson }};
+  const PLAN_NEW_PER_DAY = {{ (plan.new_per_day if plan else current_user.daily_new_limit)|tojson }};
   document.addEventListener("alpine:init", () => {
     Alpine.data("collectionPage", () => ({
       tab: "words",
@@ -171,8 +218,15 @@
         if (!confirm("Rời bộ từ này?")) return;
         this.run(async () => { await voca.post(`${this.base}/leave`); location.href = "/collections?scope=shared"; }, null, false);
       },
-      toggleLearning(value) {
-        return this.run(() => voca.patch(`${this.base}/members/${USER_ID}`, { is_learning: value }), value ? "Đã đưa vào ôn hằng ngày" : "Đã bỏ khỏi ôn hằng ngày", false);
+      newPerDay: PLAN_NEW_PER_DAY, busy: false,
+      async startPlan() {
+        this.busy = true;
+        await this.run(() => voca.post(`${this.base}/study`, { new_per_day: this.newPerDay }), "Đã bắt đầu học. Lịch học đã được lên.");
+        this.busy = false;
+      },
+      savePerDay() { return this.run(() => voca.patch(`${this.base}/study`, { new_per_day: this.newPerDay }), "Đã cập nhật số từ mới mỗi ngày"); },
+      setPlanStatus(status) {
+        return this.run(() => voca.patch(`${this.base}/study`, { status }), status === "paused" ? "Đã tạm dừng học bộ này" : "Đã tiếp tục học");
       },
     }));
   });

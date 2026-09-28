@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Bộ từ{% endblock %}
 {% block content %}
-<div class="page-head" x-data="{ open: false }">
+<div class="page-head">
   <div><h1>Bộ từ</h1><p>Sắp xếp từ vựng theo chủ đề, chia sẻ với bạn bè hoặc học sinh</p></div>
   {% if scope == 'mine' %}<button class="btn btn-primary" type="button" onclick="document.getElementById('new-collection').showModal()">+ Tạo bộ từ</button>{% endif %}
 </div>
@@ -26,6 +26,18 @@
     </div>
     {% if c.is_system %}<span class="badge">Hệ thống</span>{% else %}<span class="badge">{{ c.visibility|visibility_label }}</span>{% endif %}
     {% if scope != 'mine' %}<span class="badge">{{ role|role_label }}</span>{% endif %}
+    {% set entry = plans.get(c.id) %}
+    {% if entry and entry[0].status == 'active' %}
+      {% if entry[1].todo_today %}
+        <a class="btn btn-primary btn-sm" href="{{ url_for('web.learn', collection_id=c.id) }}">Học ({{ entry[1].todo_today }})</a>
+      {% else %}
+        <span class="badge" style="color:var(--good-ink)">✓ Xong hôm nay</span>
+      {% endif %}
+    {% elif entry %}
+      <span class="badge">Tạm dừng</span>
+    {% elif counts.get(c.id, 0) %}
+      <a class="btn btn-sm" href="{{ url_for('web.collection_detail', collection_id=c.id) }}">Bắt đầu học</a>
+    {% endif %}
   </div>
   {% else %}
   <div class="empty">

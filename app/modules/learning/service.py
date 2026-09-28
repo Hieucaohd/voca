@@ -8,15 +8,14 @@ from datetime import datetime
 from sqlalchemy import exists, func, select
 from sqlalchemy.orm import selectinload
 
-from app.core.clock import local_day_bounds, local_today, utcnow
+from app.core.clock import local_today, utcnow
 from app.core.errors import Conflict, NotFound, ValidationFailed
 from app.core.text import normalize
 from app.extensions import db
 from app.modules.auth.models import User
-from app.modules.collections import access
 from app.modules.collections import service as collections_service
+from app.modules.learning import planner
 from app.modules.learning.engine import (
-    ACTIVE_STATUSES,
     CardState,
     Grade,
     GradeResult,
@@ -60,95 +59,58 @@ def format_interval(state: CardState, now: datetime) -> str:
 
 # ---------------------------------------------------------------- queue
 
-def _pool(user: User, collection_id: str | None):
-    if collection_id:
-        collections_service.get_readable(user.id, collection_id)
-        return access.collection_vocabulary_ids(collection_id)
-    return access.learnable_vocabulary_ids(user.id)
-
-
 def activity_for(user_id: str, day) -> DailyActivity | None:
     return db.session.get(DailyActivity, (user_id, day))
 
 
-def new_remaining_today(user: User, now: datetime) -> int:
-    activity = activity_for(user.id, local_today(now, user.tz))
-    return max(0, user.daily_new_limit - (activity.new_learned if activity else 0))
-
-
 def summary(user: User, collection_id: str | None = None) -> dict:
-    now = utcnow()
-    _, end = local_day_bounds(now, user.tz)
-    pool = _pool(user, collection_id)
-    due = db.session.scalar(
-        select(func.count())
-        .select_from(CardProgress)
-        .where(
-            CardProgress.user_id == user.id,
-            CardProgress.status.in_([s.value for s in ACTIVE_STATUSES]),
-            CardProgress.due_at < end,
-            CardProgress.vocabulary_id.in_(pool),
-        )
-    )
+    """Today's workload for one collection, or across every collection being studied."""
+    if collection_id:
+        collections_service.get_readable(user.id, collection_id)
+        plan = planner.get_plan(user.id, collection_id)
+        if plan is None:
+            return {"started": False, "status": None, "due": 0, "new_today": 0, "todo": 0, "new_available": 0}
+        overview = planner.plan_overview(user, plan)
+        return {
+            "started": True,
+            "status": plan.status,
+            "due": overview["due_today"],
+            "new_today": overview["new_today"],
+            "todo": overview["todo_today"],
+            "new_available": overview["unseen_words"],
+        }
+    plans = planner.list_plans(user.id, active_only=True)
+    work = planner.today_work(user)
     unseen = db.session.scalar(
         select(func.count())
         .select_from(Vocabulary)
-        .where(Vocabulary.id.in_(pool), ~_has_progress(user.id))
-    )
+        .where(Vocabulary.id.in_(planner.learning_pool_ids(user.id)), ~planner.started_clause(user.id))
+    ) or 0
     return {
-        "due": min(due or 0, user.daily_review_limit),
-        "due_total": due or 0,
-        "new_available": unseen or 0,
-        "new_today": min(unseen or 0, new_remaining_today(user, now)),
+        "started": bool(plans),
+        "plans": len(plans),
+        "due": len(work.due),
+        "new_today": len(work.new_ids),
+        "todo": len(work.due) + len(work.new_ids),
+        "new_available": unseen,
     }
-
-
-def _has_progress(user_id: str):
-    """True once a word has been started (a NEW-status row still counts as unseen)."""
-    return exists().where(
-        CardProgress.vocabulary_id == Vocabulary.id,
-        CardProgress.user_id == user_id,
-        CardProgress.status != Status.NEW.value,
-    )
 
 
 def today_queue(user: User, query: QueueQuery) -> dict:
     now = utcnow()
     tz = user.tz
-    _, end = local_day_bounds(now, tz)
-    pool = _pool(user, query.collection_id)
-
-    due_cards = db.session.scalars(
-        select(CardProgress)
-        .where(
-            CardProgress.user_id == user.id,
-            CardProgress.status.in_([s.value for s in ACTIVE_STATUSES]),
-            CardProgress.due_at < end,
-            CardProgress.vocabulary_id.in_(pool),
-        )
-        .order_by(CardProgress.due_at)
-        .limit(query.limit or user.daily_review_limit)
-    ).all()
-
-    new_limit = new_remaining_today(user, now)
-    if query.limit:
-        new_limit = min(new_limit, max(0, query.limit - len(due_cards)))
-    new_ids = db.session.scalars(
-        select(Vocabulary.id)
-        .where(Vocabulary.id.in_(pool), ~_has_progress(user.id))
-        .order_by(Vocabulary.created_at)
-        .limit(new_limit)
-    ).all() if new_limit else []
-
-    ids = [c.vocabulary_id for c in due_cards] + list(new_ids)
+    work = planner.today_work(user, query.collection_id, query.limit)
+    due_cards = work.due
+    ids = [c.vocabulary_id for c in due_cards] + work.new_ids
     vocabs = {
         v.id: v
         for v in db.session.scalars(select(Vocabulary).options(*vocabulary_service.DETAIL_OPTIONS).where(Vocabulary.id.in_(ids)))
     } if ids else {}
     progress_by_vid = {c.vocabulary_id: c for c in due_cards}
 
+    pool = planner.pool_ids([query.collection_id]) if query.collection_id else planner.learning_pool_ids(user.id)
     rng = random.Random()
-    distractors = _distractor_pool(user, pool) if query.mode == "mcq" else []
+    distractors = _distractor_pool(user, pool) if query.mode == "mcq" and ids else []
     preview = _preview_scheduler()
 
     items = []
@@ -263,7 +225,8 @@ def submit_review(user: User, vocab_id: str, data: ReviewIn, scheduler: Schedule
         progress.correct_count += 1
     else:
         progress.wrong_count += 1
-    progress.first_reviewed_at = progress.first_reviewed_at or now
+    if is_new:
+        progress.first_reviewed_at = now  # when the word was introduced (again, after a reset)
     progress.last_reviewed_at = now
 
     log = ReviewLog(

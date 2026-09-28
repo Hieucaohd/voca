@@ -94,3 +94,29 @@ class DailyActivity(db.Model):
     correct: Mapped[int] = mapped_column(Integer, default=0)
     new_learned: Mapped[int] = mapped_column(Integer, default=0)
     time_spent_ms: Mapped[int] = mapped_column(Integer, default=0)
+
+
+PLAN_ACTIVE = "active"
+PLAN_PAUSED = "paused"
+
+
+class StudyPlan(TimestampMixin, db.Model):
+    """A learner's decision to study one collection. Words only enter the schedule through an active plan."""
+
+    __tablename__ = "study_plans"
+    __table_args__ = (UniqueConstraint("user_id", "collection_id"),)
+
+    id: Mapped[str] = id_column()
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    collection_id: Mapped[str] = mapped_column(ForeignKey("collections.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(10), default=PLAN_ACTIVE)
+    new_per_day: Mapped[int] = mapped_column(Integer, default=10)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    paused_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+    collection = relationship("Collection")
+
+    @property
+    def is_active(self) -> bool:
+        return self.status == PLAN_ACTIVE
+
